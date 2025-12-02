@@ -65,20 +65,26 @@ jobs:
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
-            # Windows-specific fixes
+            # Windows: First rebuild to download headers, then fix, then rebuild again
+            - name: Download Electron headers (Windows)
+              if: matrix.platform == 'win32'
+              run: pnpm exec @electron/rebuild -m node_modules/node-pty -v ${{ env.ELECTRON_VERSION }} --force
+              continue-on-error: true
+
             - name: Fix source files (Windows)
               if: matrix.platform == 'win32'
               run: |
-                  node scripts/fix-electron-headers.mjs
+                  node scripts/fix-electron-headers.mjs ${{ env.ELECTRON_VERSION }}
                   node scripts/fix-winpty-cc.mjs
                   node scripts/fix-conpty-cc.mjs
 
-            # Unix-specific fixes
-            - name: Fix source files (Unix)
-              if: matrix.platform != 'win32'
-              run: node scripts/fix-electron-headers.mjs
+            - name: Rebuild node-pty for Electron (Windows)
+              if: matrix.platform == 'win32'
+              run: pnpm exec @electron/rebuild -m node_modules/node-pty -v ${{ env.ELECTRON_VERSION }} --force
 
-            - name: Rebuild node-pty for Electron
+            # Unix: Just rebuild directly (no header fixes needed)
+            - name: Rebuild node-pty for Electron (Unix)
+              if: matrix.platform != 'win32'
               run: pnpm exec @electron/rebuild -m node_modules/node-pty -v ${{ env.ELECTRON_VERSION }}
 
             - name: Copy binaries

@@ -1,8 +1,8 @@
 {
 	"id": "terminal",
 	"name": "Terminal",
-	"version": "0.1.0",
-	"minAppVersion": "1.10.0",
+	"version": "0.1.1",
+	"minAppVersion": "1.10.6",
 	"description": "Integrated terminal view for Obsidian using xterm.js and node-pty",
 	"author": "Boninall",
 	"authorUrl": "https://github.com/quorafind/obsidian-terminal",
