@@ -32,6 +32,7 @@ import "@/main.css";
 export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 	terminalManager!: TerminalManager;
 	settings: TerminalPluginSettings | null = null;
+	themeColors: Record<string, string> = {};
 
 	private electronBridge!: ElectronBridge;
 	private ptyManager!: PTYManager;
@@ -83,6 +84,9 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 
 			// Register commands
 			this.registerCommands();
+
+			// Initialize theme colors (must be after DOM is ready)
+			this.themeColors = this.resolveThemeColors();
 
 			// Set up event handlers
 			this.setupEventHandlers();
@@ -187,7 +191,7 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 
 			// Create the view
 			const leaf = this.getOrCreateTerminalLeaf();
-			const view = new TerminalView(leaf, session);
+			const view = new TerminalView(leaf, session, this);
 
 			// Set the view
 			leaf.setViewState({
@@ -269,7 +273,7 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 			// This factory function is called when Obsidian needs to create the view
 			// We'll create a placeholder session for workspace restoration
 			const session = this.terminalManager.createTerminal();
-			return new TerminalView(leaf, session);
+			return new TerminalView(leaf, session, this);
 		});
 	}
 
@@ -356,6 +360,17 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 			// 防抖处理窗口 resize 事件
 			this.debounceResizeAllViews(150);
 		});
+
+		// Handle theme/CSS changes
+		this.registerEvent(
+			this.app.workspace.on("css-change", () => {
+				this.themeColors = this.resolveThemeColors();
+				// Update all terminal views with new theme
+				for (const view of this.getTerminalViews()) {
+					view.updateTheme(this.themeColors);
+				}
+			}),
+		);
 	}
 
 	/**
@@ -524,5 +539,52 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 	 */
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+
+		// 保存设置后通知所有终端视图更新外观
+		this.getTerminalViews().forEach((view) => {
+			view.applySettings();
+		});
+	}
+
+	/**
+	 * Resolve CSS variables to actual color values for xterm.js
+	 * xterm.js theme does not support CSS variables, so we must resolve them at runtime
+	 */
+	private resolveThemeColors(): Record<string, string> {
+		const styles = getComputedStyle(document.body);
+		const resolve = (cssVar: string, fallback: string): string => {
+			const value = styles.getPropertyValue(cssVar).trim();
+			return value || fallback;
+		};
+
+		return {
+			// Core colors
+			background: resolve("--background-secondary", "#1e1e1e"),
+			foreground: resolve("--text-normal", "#d4d4d4"),
+			cursor: resolve("--text-accent", "#569cd6"),
+			cursorAccent: resolve("--background-secondary", "#1e1e1e"),
+			selectionBackground: resolve(
+				"--text-selection",
+				"rgba(255, 255, 255, 0.3)",
+			),
+			// ANSI colors
+			black: resolve("--color-base-00", "#1e1e1e"),
+			red: resolve("--color-red", "#e93147"),
+			green: resolve("--color-green", "#08b94e"),
+			yellow: resolve("--color-yellow", "#e0ac00"),
+			blue: resolve("--color-blue", "#086ddd"),
+			magenta: resolve("--color-purple", "#7852ee"),
+			cyan: resolve("--color-cyan", "#00bfbc"),
+			white: resolve("--color-base-70", "#d4d4d4"),
+			// Bright ANSI colors
+			brightBlack: resolve("--color-base-50", "#808080"),
+			brightRed: resolve("--color-red", "#e93147"),
+			brightGreen: resolve("--color-green", "#08b94e"),
+			brightYellow: resolve("--color-yellow", "#e0ac00"),
+			brightBlue: resolve("--color-blue", "#086ddd"),
+			brightMagenta: resolve("--color-purple", "#7852ee"),
+			brightCyan: resolve("--color-cyan", "#00bfbc"),
+			brightWhite: resolve("--color-base-100", "#ffffff"),
+		};
 	}
 }

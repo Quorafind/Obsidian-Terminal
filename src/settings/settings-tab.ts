@@ -22,8 +22,9 @@ import {
 	NativeBinaryManager,
 	type BinaryStatus,
 	type ProgressCallback,
-} from "../core/native-binary-manager";
-import { isPlatformSupported, MODULE_INFO } from "../core/embedded-modules";
+} from "@/core/native-binary-manager";
+import { isPlatformSupported, MODULE_INFO } from "@/core/embedded-modules";
+import { GHOSTTY_OPTIONS } from "@/constants";
 
 /**
  * Plugin settings interface
@@ -45,11 +46,11 @@ export interface TerminalPluginSettings {
 export const DEFAULT_SETTINGS: TerminalPluginSettings = {
 	defaultShell: "",
 	shellArgs: [],
-	fontSize: 14,
-	fontFamily: 'Consolas, "Courier New", monospace',
+	fontSize: GHOSTTY_OPTIONS.fontSize,
+	fontFamily: GHOSTTY_OPTIONS.fontFamily,
 	cursorBlink: true,
 	scrollback: 1000,
-	githubRepo: "user/obsidian-terminal", // TODO: Update with actual repo
+	githubRepo: "quorafind/obsidian-terminal",
 };
 
 /**

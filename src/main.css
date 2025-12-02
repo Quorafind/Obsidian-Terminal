@@ -1,3 +1,9 @@
 .mod-root .workspace-leaf-content[data-type="terminal-view"] .view-content {
 	background-color: var(--background-secondary);
 }
+
+.workspace-leaf-content[data-type="terminal-view"] {
+	--font-monospace-terminal:
+		"Source Code Pro", "Cascadia Code", Consolas, "Cascadia Mono", Menlo,
+		Monaco, "Courier New", monospace;
+}

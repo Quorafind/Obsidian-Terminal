@@ -13,6 +13,8 @@ import {
 	TERMINAL_VIEW_DISPLAY_TEXT,
 	DEFAULT_TERMINAL_DIMENSIONS,
 } from "@/constants";
+import type TerminalPlugin from "@/main";
+import { DEFAULT_SETTINGS } from "@/settings";
 
 // Import xterm.js CSS as string for Shadow DOM injection
 import xtermCss from "@xterm/xterm/css/xterm.css?inline";
@@ -133,6 +135,7 @@ export class TerminalView extends BaseTerminalView {
 	terminal!: Terminal;
 	terminalSession!: TerminalSession;
 	terminalViewContainer!: HTMLElement;
+	plugin: TerminalPlugin;
 
 	private shadowHost: HTMLElement | null = null;
 	private shadowRoot: ShadowRoot | null = null;
@@ -146,14 +149,14 @@ export class TerminalView extends BaseTerminalView {
 	private initializationState: "idle" | "initializing" | "ready" | "error" =
 		"idle";
 
-	// Terminal configuration
-	private readonly fontSize = 14;
-	private readonly fontFamily =
-		'Consolas, "Cascadia Mono", Menlo, Monaco, "Courier New", monospace';
-
-	constructor(leaf: WorkspaceLeaf, terminalSession: TerminalSession) {
+	constructor(
+		leaf: WorkspaceLeaf,
+		terminalSession: TerminalSession,
+		plugin: TerminalPlugin,
+	) {
 		super(leaf);
 		this.terminalSession = terminalSession;
+		this.plugin = plugin;
 	}
 
 	getViewType(): string {
@@ -249,6 +252,15 @@ export class TerminalView extends BaseTerminalView {
 			return;
 		}
 
+		// Skip resize when container is not visible (e.g., background tab with display:none)
+		// This prevents FitAddon from calculating incorrect dimensions (0x0)
+		if (
+			this.terminalViewContainer.offsetWidth === 0 ||
+			this.terminalViewContainer.offsetHeight === 0
+		) {
+			return;
+		}
+
 		try {
 			this.fitAddon.fit();
 
@@ -336,19 +348,26 @@ export class TerminalView extends BaseTerminalView {
 	 * Create xterm.js terminal instance
 	 */
 	private createTerminalInstance(): void {
-		const theme = this.getObsidianTheme();
+		const theme = this.plugin.themeColors;
+
+		// 从插件设置读取配置，提供安全回退值
+		const settings = this.plugin.settings;
+		const fontSize = settings?.fontSize ?? DEFAULT_SETTINGS.fontSize;
+		const fontFamily = settings?.fontFamily ?? DEFAULT_SETTINGS.fontFamily;
+		const cursorBlink =
+			settings?.cursorBlink ?? DEFAULT_SETTINGS.cursorBlink;
+		const scrollback = settings?.scrollback ?? DEFAULT_SETTINGS.scrollback;
 
 		this.terminal = new Terminal({
-			fontSize: this.fontSize,
-			fontFamily: this.fontFamily,
-			cursorBlink: true,
+			fontSize,
+			fontFamily,
+			cursorBlink,
 			cursorStyle: "block",
 			allowTransparency: true,
 			theme,
 			cols: DEFAULT_TERMINAL_DIMENSIONS.cols,
 			rows: DEFAULT_TERMINAL_DIMENSIONS.rows,
-			// 限制历史记录行数，防止内存膨胀
-			scrollback: 1000,
+			scrollback,
 			// 启用 Windows 模式以更好支持 ConPTY
 			windowsMode: process.platform === "win32",
 			// 允许透明度以支持 Obsidian 主题
@@ -427,36 +446,13 @@ export class TerminalView extends BaseTerminalView {
 	}
 
 	/**
-	 * Get Obsidian theme colors for terminal
-	 * Uses CSS variables directly - they inherit through Shadow DOM
+	 * Update terminal theme colors
+	 * Called by plugin when Obsidian theme changes (css-change event)
 	 */
-	private getObsidianTheme(): Record<string, string> {
-		return {
-			// Core colors from Obsidian theme
-			background: "var(--background-secondary, #1e1e1e)",
-			foreground: "var(--text-normal, #d4d4d4)",
-			cursor: "var(--text-accent, #569cd6)",
-			cursorAccent: "var(--background-secondary, #1e1e1e)",
-			selectionBackground:
-				"var(--text-selection, rgba(255, 255, 255, 0.3))",
-			// Terminal colors using Obsidian's color palette
-			black: "var(--color-base-00, #1e1e1e)",
-			red: "var(--color-red, #e93147)",
-			green: "var(--color-green, #08b94e)",
-			yellow: "var(--color-yellow, #e0ac00)",
-			blue: "var(--color-blue, #086ddd)",
-			magenta: "var(--color-purple, #7852ee)",
-			cyan: "var(--color-cyan, #00bfbc)",
-			white: "var(--color-base-70, #d4d4d4)",
-			brightBlack: "var(--color-base-50, #808080)",
-			brightRed: "var(--color-red, #e93147)",
-			brightGreen: "var(--color-green, #08b94e)",
-			brightYellow: "var(--color-yellow, #e0ac00)",
-			brightBlue: "var(--color-blue, #086ddd)",
-			brightMagenta: "var(--color-purple, #7852ee)",
-			brightCyan: "var(--color-cyan, #00bfbc)",
-			brightWhite: "var(--color-base-100, #ffffff)",
-		};
+	updateTheme(theme: Record<string, string>): void {
+		if (this.terminal) {
+			this.terminal.options.theme = theme;
+		}
 	}
 
 	/**
@@ -592,6 +588,25 @@ export class TerminalView extends BaseTerminalView {
 		if (this.terminal) {
 			this.terminal.clear();
 		}
+	}
+
+	/**
+	 * Apply settings update to terminal
+	 * Called when user changes settings to apply changes immediately
+	 */
+	applySettings(): void {
+		if (!this.terminal || !this.plugin.settings) return;
+
+		const { fontSize, fontFamily, cursorBlink, scrollback } =
+			this.plugin.settings;
+
+		this.terminal.options.fontSize = fontSize;
+		this.terminal.options.fontFamily = fontFamily;
+		this.terminal.options.cursorBlink = cursorBlink;
+		this.terminal.options.scrollback = scrollback;
+
+		// 字体大小变更后需要重新适配尺寸
+		this.resize();
 	}
 
 	/**

@@ -84,7 +84,7 @@ const CURRENT_CONFIG = {
 	electronVersion: MODULE_INFO.electronVersion,
 	nodeABI: MODULE_INFO.nodeABI,
 	// Default GitHub repository (can be overridden in settings)
-	defaultGitHubRepo: "user/obsidian-terminal", // TODO: Update with actual repo
+	defaultGitHubRepo: "quorafind/obsidian-terminal",
 };
 
 /**

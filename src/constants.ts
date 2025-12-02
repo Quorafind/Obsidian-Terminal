@@ -2,8 +2,8 @@
  * Plugin constants and configuration
  */
 
-export const PLUGIN_ID = "obsidian-terminal-view";
-export const PLUGIN_NAME = "Terminal View";
+export const PLUGIN_ID = "terminal";
+export const PLUGIN_NAME = "Terminal";
 
 export const VIEW_TYPE_TERMINAL = "terminal-view";
 export const TERMINAL_VIEW_DISPLAY_TEXT = "Terminal";
@@ -32,5 +32,5 @@ export const PLATFORM_SHELLS = {
 export const GHOSTTY_OPTIONS = {
 	fontSize: 14,
 	fontFamily:
-		'var(--font-monospace-default, Consolas), "Cascadia Mono", Menlo, Monaco, monospace',
+		"var(--font-monospace-terminal),var(--font-monospace-override),var(--font-monospace-theme), var(--font-monospace)",
 } as const;
