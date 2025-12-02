@@ -117,33 +117,11 @@ async function buildMain() {
 	console.log("✅ Main plugin built successfully");
 }
 
-// Build PTY host sidecar (separate process)
-async function buildPtyHost() {
-	console.log("📦 Building PTY host sidecar...");
-
-	await esbuild.build({
-		...sharedOptions,
-		banner: { js: banner },
-		entryPoints: ["src/pty-host.ts"],
-		// PTY host runs in Node.js context, so we only externalize node-pty
-		// which will be loaded at runtime from node_modules
-		external: ["node-pty", ...builtins],
-		outfile: "pty-host.js",
-		platform: "node",
-		// Don't watch PTY host - it's a stable component
-		watch: false,
-	});
-
-	console.log("✅ PTY host built successfully");
-}
-
 // Main build process
 async function build() {
 	try {
-		// Build both bundles
-		await Promise.all([buildMain(), buildPtyHost()]);
-
-		console.log("🎉 All builds completed successfully");
+		await buildMain();
+		console.log("🎉 Build completed successfully");
 	} catch (error) {
 		console.error("❌ Build failed:", error);
 		process.exit(1);
