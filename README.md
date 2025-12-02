@@ -208,9 +208,3 @@ Distributed under the **MIT License**. See [LICENSE](LICENSE) for more informati
 <p align="center">
   Made with ❤️ by <a href="https://github.com/Boninall">Boninall</a>
 </p>
-
-<p align="center">
-  <a href="https://www.buymeacoffee.com/boninall">
-    <img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=☕&slug=boninall&button_colour=6a8695&font_colour=ffffff&font_family=Poppins&outline_colour=000000&coffee_colour=FFDD00" />
-  </a>
-</p>
