@@ -1,8 +1,91 @@
-/*
+/* Terminal View Container - Core container styles */
+.terminal-view-container {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	background: var(--background-primary);
+	border-radius: var(--radius-s);
+	overflow: hidden;
+	min-height: 200px;
+	position: relative;
+	outline: none !important;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+/* Ghostty mount element */
+.ghostty-mount {
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	position: relative;
+}
 
-If your plugin does not need CSS, delete this file.
+/* Ghostty / Canvas terminal styling */
+/* Target canvas directly within container, no dependency on specific class names */
+.terminal-view-container canvas {
+	display: block;
+	outline: none !important;
+	user-select: none;
+	-webkit-user-select: none;
+}
 
-*/
+/* Remove focus outline from all elements within container */
+.terminal-view-container :focus {
+	outline: none !important;
+}
+
+/* --------------------------------------------------------- */
+/* Generic styles independent of terminal implementation */
+/* --------------------------------------------------------- */
+
+/* Terminal error messages */
+.terminal-error {
+	color: var(--text-error);
+	background: var(--background-modifier-error);
+	padding: 8px;
+	border-radius: var(--radius-s);
+	margin: 8px;
+	font-family: var(--font-monospace);
+	z-index: 10;
+	position: relative;
+}
+
+/* Terminal status messages */
+.terminal-status {
+	color: var(--text-muted);
+	background: var(--background-secondary);
+	padding: 4px 8px;
+	font-size: var(--font-ui-smaller);
+	text-align: center;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Animation for terminal loading */
+@keyframes terminal-fade-in {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.terminal-view-container {
+	animation: terminal-fade-in 0.2s ease-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+	.terminal-view-container {
+		padding: 0;
+	}
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+	.terminal-view-container {
+		border: 1px solid var(--background-modifier-border);
+	}
+}
