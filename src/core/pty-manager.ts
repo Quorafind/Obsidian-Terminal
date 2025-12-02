@@ -1,5 +1,10 @@
 import { IPty } from "@/types";
-import { PTYManager as BasePTYManager, PTYOptions, TerminalPluginError, TerminalErrorType } from "@/types";
+import {
+	PTYManager as BasePTYManager,
+	PTYOptions,
+	TerminalPluginError,
+	TerminalErrorType,
+} from "@/types";
 import { ElectronBridge } from "./electron-bridge";
 import { DEFAULT_TERMINAL_DIMENSIONS } from "@/constants";
 
@@ -21,33 +26,62 @@ export class PTYManager extends BasePTYManager {
 	 */
 	createPTY(options: PTYOptions): IPty {
 		try {
+			console.log("📦 PTYManager.createPTY called with options:", {
+				shell: options.shell,
+				cwd: options.cwd,
+				cols: options.cols,
+				rows: options.rows,
+			});
+
 			const nodePty = this.electronBridge.getNodePTY();
+			console.log(
+				"📦 getNodePTY result:",
+				nodePty ? "available" : "null",
+			);
+			console.log(
+				"📦 PTY load mode:",
+				this.electronBridge.getPtyLoadMode(),
+			);
+
 			if (!nodePty) {
 				throw new TerminalPluginError(
 					TerminalErrorType.NODE_PTY_NOT_AVAILABLE,
-					"node-pty module is not available"
+					"node-pty module is not available",
 				);
 			}
 
 			// Validate shell exists before creating PTY
 			const shellExists = this.validateShellPath(options.shell);
+			console.log(
+				"📦 Shell validation:",
+				options.shell,
+				"exists:",
+				shellExists,
+			);
+
 			if (!shellExists) {
 				throw new TerminalPluginError(
 					TerminalErrorType.SHELL_NOT_FOUND,
-					`Shell not found: ${options.shell}`
+					`Shell not found: ${options.shell}`,
 				);
 			}
 
+			console.log("📦 Calling nodePty.spawn...");
+
 			// Create PTY process with UTF-8 support
+			// Note: useConpty is disabled because conpty.node may not be available
+			// in the plugin's node_modules. WinPTY (pty.node) is used instead.
 			const pty = nodePty.spawn(options.shell, options.args, {
 				name: "xterm-256color",
 				cols: options.cols,
 				rows: options.rows,
 				cwd: options.cwd,
 				env: options.env,
-				encoding: 'utf8',
-				useConpty: process.platform === 'win32', // Use ConPTY on Windows for better Unicode support
+				encoding: "utf8",
+				useConpty: false, // Force WinPTY - conpty.node may not be compiled
 			}) as IPty;
+
+			console.log("✅ PTY spawned successfully, pid:", pty.pid);
 
 			// Track the PTY process
 			this.activePTYs.add(pty);
@@ -59,21 +93,29 @@ export class PTYManager extends BasePTYManager {
 			});
 
 			pty.on("exit", (exitCode: number, signal?: number) => {
-				console.log(`PTY process exited with code ${exitCode}, signal ${signal}`);
+				console.log(
+					`PTY process exited with code ${exitCode}, signal ${signal}`,
+				);
 				this.activePTYs.delete(pty);
 			});
 
 			return pty;
 		} catch (error) {
+			// 详细记录原始错误
+			console.error("❌ PTY creation failed:", error);
+			console.error("❌ Error name:", (error as Error)?.name);
+			console.error("❌ Error message:", (error as Error)?.message);
+			console.error("❌ Error stack:", (error as Error)?.stack);
+
 			if (error instanceof TerminalPluginError) {
 				throw error;
 			}
-			
+
 			throw new TerminalPluginError(
 				TerminalErrorType.PTY_CREATION_FAILED,
-				"Failed to create PTY process",
+				`Failed to create PTY process: ${(error as Error)?.message || error}`,
 				error as Error,
-				{ options }
+				{ options },
 			);
 		}
 	}
@@ -101,7 +143,7 @@ export class PTYManager extends BasePTYManager {
 			throw new TerminalPluginError(
 				TerminalErrorType.PTY_CREATION_FAILED,
 				"Failed to destroy PTY process",
-				error as Error
+				error as Error,
 			);
 		}
 	}
@@ -134,20 +176,20 @@ export class PTYManager extends BasePTYManager {
 	getDefaultOptions(): PTYOptions {
 		const baseEnv = this.electronBridge.getEnvironmentVariables();
 		const proc = this.electronBridge.getProcess();
-		
+
 		// Set up UTF-8 encoding environment
 		const utf8Env: any = {
 			...baseEnv,
 			// Force UTF-8 encoding
-			LANG: baseEnv.LANG || 'zh_CN.UTF-8',
-			LC_ALL: baseEnv.LC_ALL || 'zh_CN.UTF-8',
-			LC_CTYPE: baseEnv.LC_CTYPE || 'zh_CN.UTF-8',
+			LANG: baseEnv.LANG || "zh_CN.UTF-8",
+			LC_ALL: baseEnv.LC_ALL || "zh_CN.UTF-8",
+			LC_CTYPE: baseEnv.LC_CTYPE || "zh_CN.UTF-8",
 		};
 
 		// Platform-specific encoding setup
-		if (proc.platform === 'win32') {
-			utf8Env.CHCP = '65001'; // UTF-8 code page for Windows
-			utf8Env.PYTHONIOENCODING = 'utf-8';
+		if (proc.platform === "win32") {
+			utf8Env.CHCP = "65001"; // UTF-8 code page for Windows
+			utf8Env.PYTHONIOENCODING = "utf-8";
 		}
 
 		return {
@@ -164,7 +206,7 @@ export class PTYManager extends BasePTYManager {
 	 * Resize all active PTY processes
 	 */
 	resizeAllPTYs(cols: number, rows: number): void {
-		this.activePTYs.forEach(pty => {
+		this.activePTYs.forEach((pty) => {
 			try {
 				pty.resize(cols, rows);
 			} catch (error) {
@@ -185,7 +227,7 @@ export class PTYManager extends BasePTYManager {
 	 */
 	cleanup(): void {
 		const ptysToDestroy = Array.from(this.activePTYs);
-		ptysToDestroy.forEach(pty => {
+		ptysToDestroy.forEach((pty) => {
 			this.destroyPTY(pty);
 		});
 		this.activePTYs.clear();
@@ -208,14 +250,14 @@ export class PTYManager extends BasePTYManager {
 	 */
 	getAlternativeShells(): string[] {
 		const proc = this.electronBridge.getProcess();
-		
+
 		switch (proc.platform) {
 			case "win32":
 				return [
 					"powershell.exe",
 					"cmd.exe",
 					"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-					"C:\\Windows\\System32\\cmd.exe"
+					"C:\\Windows\\System32\\cmd.exe",
 				];
 			case "darwin":
 				return [
@@ -223,7 +265,7 @@ export class PTYManager extends BasePTYManager {
 					"/bin/bash",
 					"/bin/sh",
 					"/usr/local/bin/zsh",
-					"/usr/local/bin/bash"
+					"/usr/local/bin/bash",
 				];
 			case "linux":
 				return [
@@ -232,7 +274,7 @@ export class PTYManager extends BasePTYManager {
 					"/bin/zsh",
 					"/usr/bin/bash",
 					"/usr/bin/sh",
-					"/usr/bin/zsh"
+					"/usr/bin/zsh",
 				];
 			default:
 				return ["/bin/sh"];
@@ -244,7 +286,7 @@ export class PTYManager extends BasePTYManager {
 	 */
 	async findAvailableShell(): Promise<string> {
 		const alternatives = this.getAlternativeShells();
-		
+
 		for (const shell of alternatives) {
 			try {
 				const isValid = await this.electronBridge.validateShell(shell);
@@ -255,7 +297,7 @@ export class PTYManager extends BasePTYManager {
 				continue;
 			}
 		}
-		
+
 		// Return default if no alternatives work
 		return this.getDefaultShell();
 	}

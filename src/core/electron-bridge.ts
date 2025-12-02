@@ -213,20 +213,41 @@ export class ElectronBridge extends BaseElectronBridge {
 			let remote: any;
 			try {
 				remote = this.requireModule("@electron/remote");
-			} catch {
-				console.debug(
-					"@electron/remote not available directly, trying window.require",
+				console.log("✅ @electron/remote loaded via requireModule");
+			} catch (e) {
+				console.log(
+					"⚠️ @electron/remote not available via requireModule:",
+					(e as Error)?.message,
 				);
 				try {
 					remote = (window as any).require("@electron/remote");
-				} catch {
-					console.debug("@electron/remote not available");
+					console.log(
+						"✅ @electron/remote loaded via window.require",
+					);
+				} catch (e2) {
+					console.log(
+						"⚠️ @electron/remote not available via window.require:",
+						(e2 as Error)?.message,
+					);
 					return null;
 				}
 			}
 
-			if (!remote || typeof remote.require !== "function") {
-				console.debug("@electron/remote.require is not available");
+			if (!remote) {
+				console.log("❌ @electron/remote is null/undefined");
+				return null;
+			}
+
+			console.log(
+				"📦 @electron/remote object keys:",
+				Object.keys(remote),
+			);
+
+			if (typeof remote.require !== "function") {
+				console.log(
+					"❌ @electron/remote.require is not a function, type:",
+					typeof remote.require,
+				);
 				return null;
 			}
 
@@ -240,28 +261,45 @@ export class ElectronBridge extends BaseElectronBridge {
 				"node-pty", // Global fallback
 			];
 
+			console.log(
+				"🔍 Will try to load node-pty from paths:",
+				nodePtyPaths,
+			);
+
 			for (const ptyPath of nodePtyPaths) {
 				try {
+					console.log(`🔍 Trying to load node-pty from: ${ptyPath}`);
 					const nodePty = remote.require(ptyPath);
+
 					if (nodePty && typeof nodePty.spawn === "function") {
 						console.log(
 							"✅ node-pty loaded via @electron/remote from:",
 							ptyPath,
 						);
+						console.log(
+							"📦 node-pty exports:",
+							Object.keys(nodePty),
+						);
 						return nodePty;
+					} else {
+						console.log(
+							"⚠️ node-pty loaded but spawn is not a function:",
+							typeof nodePty?.spawn,
+						);
 					}
 				} catch (err) {
-					console.debug(
-						`Failed to load node-pty from ${ptyPath}:`,
-						err,
+					console.log(
+						`❌ Failed to load node-pty from ${ptyPath}:`,
+						(err as Error)?.message,
 					);
+					console.log("❌ Full error:", err);
 				}
 			}
 
-			console.debug("node-pty not found via @electron/remote");
+			console.log("❌ node-pty not found via @electron/remote");
 			return null;
 		} catch (error) {
-			console.debug("Failed to load via @electron/remote:", error);
+			console.log("❌ Failed to load via @electron/remote:", error);
 			return null;
 		}
 	}
@@ -787,7 +825,7 @@ export class ElectronBridge extends BaseElectronBridge {
 	/**
 	 * Initialize PTY loading - tries strategies in order
 	 * 1. @electron/remote (direct main process loading)
-	 * 2. PTY Host Sidecar (separate process with IPC)
+	 * 2. PTY Host Sidecar (separate process with IPC) - DISABLED FOR TESTING
 	 */
 	private async initializePtyLoading(): Promise<void> {
 		if (this._ptyLoadMode !== null) {
@@ -804,13 +842,19 @@ export class ElectronBridge extends BaseElectronBridge {
 			return;
 		}
 
-		// Strategy 2: Fall back to Sidecar
-		console.log(
-			"⚠️ @electron/remote not available, falling back to Sidecar mode",
+		// Strategy 2: Fall back to Sidecar - DISABLED FOR TESTING
+		// console.log(
+		// 	"⚠️ @electron/remote not available, falling back to Sidecar mode",
+		// );
+		// await this.ensureHostProcess();
+		// this._ptyLoadMode = "sidecar";
+		// console.log("✅ PTY mode: Sidecar (IPC)");
+
+		// For testing: throw error instead of falling back to sidecar
+		throw new Error(
+			"@electron/remote failed to load node-pty. Sidecar mode is disabled for testing. " +
+				"Check console logs for details.",
 		);
-		await this.ensureHostProcess();
-		this._ptyLoadMode = "sidecar";
-		console.log("✅ PTY mode: Sidecar (IPC)");
 	}
 
 	/**

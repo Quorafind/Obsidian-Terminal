@@ -46,6 +46,35 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = process.argv[2] === "production";
 
+/**
+ * Plugin to handle TypeScript path aliases (@/*)
+ */
+const aliasPlugin = {
+	name: "alias",
+	setup(build) {
+		// Handle @/* imports - resolve to src/* with index.ts for directories
+		build.onResolve({ filter: /^@\// }, (args) => {
+			const relativePath = args.path.replace(/^@\//, "src/");
+			const fullPath = join(process.cwd(), relativePath);
+
+			// Check if it's a directory (has index.ts)
+			const indexPath = join(fullPath, "index.ts");
+			if (existsSync(indexPath)) {
+				return { path: indexPath };
+			}
+
+			// Check if it's a .ts file
+			const tsPath = fullPath + ".ts";
+			if (existsSync(tsPath)) {
+				return { path: tsPath };
+			}
+
+			// Return as-is and let esbuild handle it
+			return { path: fullPath };
+		});
+	},
+};
+
 // Shared build options
 const sharedOptions = {
 	bundle: true,
@@ -64,7 +93,7 @@ async function buildMain() {
 		...sharedOptions,
 		banner: { js: banner },
 		entryPoints: ["main.ts"],
-		plugins: [inlineCssPlugin],
+		plugins: [aliasPlugin, inlineCssPlugin],
 		external: [
 			"obsidian",
 			"electron",

@@ -4,8 +4,19 @@ import {
 	TerminalPluginError,
 	TerminalErrorType,
 } from "@/types";
-import { ElectronBridge, PTYManager, TerminalManager } from "@/core";
+import {
+	ElectronBridge,
+	PTYManager,
+	TerminalManager,
+	NativeBinaryManager,
+	BinaryStatus,
+} from "@/core";
 import { TerminalView } from "@/views";
+import {
+	TerminalSettingsTab,
+	DEFAULT_SETTINGS,
+	type TerminalPluginSettings,
+} from "@/settings";
 import {
 	PLUGIN_ID,
 	VIEW_TYPE_TERMINAL,
@@ -19,9 +30,13 @@ import {
  */
 export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 	terminalManager!: TerminalManager;
+	settings: TerminalPluginSettings | null = null;
 
 	private electronBridge!: ElectronBridge;
 	private ptyManager!: PTYManager;
+	private binaryManager!: NativeBinaryManager;
+	private _pluginDir: string = "";
+	private _nativeModulesReady: boolean = false;
 
 	/**
 	 * Called when the plugin is loaded
@@ -29,7 +44,35 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 	async onload(): Promise<void> {
 		try {
 			console.log(`Loading ${PLUGIN_ID}...`);
-			console.log(this);
+
+			// Load settings first
+			await this.loadSettings();
+
+			// Calculate plugin directory early
+			this._pluginDir = this.getPluginDirectory();
+
+			// Initialize binary manager
+			this.binaryManager = new NativeBinaryManager(this._pluginDir);
+
+			// Add settings tab
+			this.addSettingTab(new TerminalSettingsTab(this.app, this));
+
+			// Check if native modules are installed
+			const status = this.binaryManager.getStatus();
+			if (!status.installed || status.needsUpdate) {
+				// Show notice about missing native modules
+				this.showNativeModulesNotice(status);
+				console.warn(
+					`${PLUGIN_ID}: Native modules not installed. Terminal features disabled.`,
+				);
+
+				// Register limited commands (settings only)
+				this.registerLimitedCommands();
+				return;
+			}
+
+			// Native modules are ready
+			this._nativeModulesReady = true;
 
 			// Initialize core components
 			await this.initializeComponents();
@@ -56,6 +99,55 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 				);
 			}
 		}
+	}
+
+	/**
+	 * Show notice about missing native modules
+	 */
+	private showNativeModulesNotice(status: BinaryStatus): void {
+		const notice = new Notice("", 0); // Persistent notice
+		const container = notice.messageEl;
+		container.empty();
+		container.addClass("terminal-native-notice");
+
+		container.createEl("strong", { text: "Terminal 插件需要下载原生模块" });
+		container.createEl("br");
+		container.createEl("span", {
+			text: `平台: ${status.platformKey}`,
+			cls: "notice-platform",
+		});
+		container.createEl("br");
+		container.createEl("br");
+
+		const btn = container.createEl("button", { text: "打开设置下载" });
+		btn.onclick = () => {
+			// Open plugin settings
+			(this.app as any).setting.open();
+			(this.app as any).setting.openTabById(PLUGIN_ID);
+			notice.hide();
+		};
+
+		const closeBtn = container.createEl("button", {
+			text: "稍后",
+			cls: "notice-close-btn",
+		});
+		closeBtn.style.marginLeft = "8px";
+		closeBtn.onclick = () => notice.hide();
+	}
+
+	/**
+	 * Register limited commands when native modules are not available
+	 */
+	private registerLimitedCommands(): void {
+		// Only register settings-related command
+		this.addCommand({
+			id: "open-settings",
+			name: "打开终端设置",
+			callback: () => {
+				(this.app as any).setting.open();
+				(this.app as any).setting.openTabById(PLUGIN_ID);
+			},
+		});
 	}
 
 	/**
@@ -407,5 +499,27 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 			);
 			return pluginDir;
 		}
+	}
+
+	/**
+	 * Get plugin directory (public accessor)
+	 */
+	getPluginDir(): string {
+		return this._pluginDir || this.getPluginDirectory();
+	}
+
+	/**
+	 * Load plugin settings
+	 */
+	async loadSettings(): Promise<void> {
+		const data = await this.loadData();
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+	}
+
+	/**
+	 * Save plugin settings
+	 */
+	async saveSettings(): Promise<void> {
+		await this.saveData(this.settings);
 	}
 }

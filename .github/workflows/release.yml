@@ -1,71 +1,212 @@
-name: Release Obsidian plugin
+name: Release
 
 on:
-    release:
-        types: [ created ]
+    push:
+        tags:
+            - "*"
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "Version to release (e.g., 1.0.0)"
+                required: false
 
 env:
-    PLUGIN_NAME: obsidian-canvas-presentation
+    ELECTRON_VERSION: "37.10.2"
+    NODE_ABI: "136"
+    PLUGIN_NAME: "obsidian-terminal"
 
 jobs:
-    build:
-        runs-on: ubuntu-latest
+    # ===========================================
+    # Build native modules for each platform
+    # ===========================================
+    build-native:
+        strategy:
+            matrix:
+                include:
+                    - os: windows-latest
+                      platform: win32
+                      arch: x64
+                      node-version: "24"
+                    - os: macos-13 # Intel Mac
+                      platform: darwin
+                      arch: x64
+                      node-version: "24"
+                    - os: macos-14 # Apple Silicon
+                      platform: darwin
+                      arch: arm64
+                      node-version: "24"
+                    - os: ubuntu-latest
+                      platform: linux
+                      arch: x64
+                      node-version: "24"
+
+        runs-on: ${{ matrix.os }}
+        name: Build ${{ matrix.platform }}-${{ matrix.arch }}
+
         steps:
-            -   uses: actions/checkout@v3
-            -   name: Use Node.js
-                uses: actions/setup-node@v3
-                with:
-                    node-version: 16
-            -   name: Build
-                id: build
-                run: |
-                    npm install
-                    npm run build
-                    mkdir ${{ env.PLUGIN_NAME }}
-                    cp main.js manifest.json styles.css ${{ env.PLUGIN_NAME }}
-                    zip -r ${{ env.PLUGIN_NAME }}.zip ${{ env.PLUGIN_NAME }}
-                    ls
-                    echo "::set-output name=tag_name::$(git tag --sort version:refname | tail -n 1)"
-            -   name: Upload zip file
-                id: upload-zip
-                uses: actions/upload-release-asset@v1
-                env:
-                    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                with:
-                    upload_url: ${{ github.event.release.upload_url }}
-                    asset_path: ./${{ env.PLUGIN_NAME }}.zip
-                    asset_name: ${{ env.PLUGIN_NAME }}-${{ steps.build.outputs.tag_name }}.zip
-                    asset_content_type: application/zip
+            - name: Checkout
+              uses: actions/checkout@v4
 
-            -   name: Upload main.js
-                id: upload-main
-                uses: actions/upload-release-asset@v1
-                env:
-                    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                with:
-                    upload_url: ${{ github.event.release.upload_url }}
-                    asset_path: ./main.js
-                    asset_name: main.js
-                    asset_content_type: text/javascript
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ matrix.node-version }}
+                  cache: "npm"
 
-            -   name: Upload manifest.json
-                id: upload-manifest
-                uses: actions/upload-release-asset@v1
-                env:
-                    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                with:
-                    upload_url: ${{ github.event.release.upload_url }}
-                    asset_path: ./manifest.json
-                    asset_name: manifest.json
-                    asset_content_type: application/json
+            - name: Install dependencies
+              run: npm ci
 
-            -   name: Upload styles.css
-                id: upload-css
-                uses: actions/upload-release-asset@v1
-                env:
-                    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                with:
-                    upload_url: ${{ github.event.release.upload_url }}
-                    asset_path: ./styles.css
-                    asset_name: styles.css
-                    asset_content_type: text/css
+            # Windows-specific fixes
+            - name: Fix source files (Windows)
+              if: matrix.platform == 'win32'
+              run: |
+                  node scripts/fix-electron-headers.mjs
+                  node scripts/fix-winpty-cc.mjs
+                  node scripts/fix-conpty-cc.mjs
+
+            # Unix-specific fixes
+            - name: Fix source files (Unix)
+              if: matrix.platform != 'win32'
+              run: node scripts/fix-electron-headers.mjs
+
+            - name: Rebuild node-pty for Electron
+              run: npx @electron/rebuild -m node_modules/node-pty -v ${{ env.ELECTRON_VERSION }}
+
+            - name: Copy binaries
+              run: node scripts/copy-node-pty-binaries.mjs
+
+            - name: List built binaries
+              shell: bash
+              run: ls -la node_modules/node-pty/build/Release/ || true
+
+            # Upload platform-specific binaries
+            - name: Upload native binaries
+              uses: actions/upload-artifact@v4
+              with:
+                  name: native-${{ matrix.platform }}_${{ matrix.arch }}
+                  path: node_modules/node-pty/build/Release/*.node
+                  retention-days: 1
+
+    # ===========================================
+    # Build plugin and create release
+    # ===========================================
+    release:
+        needs: build-native
+        runs-on: ubuntu-latest
+        name: Create Release
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: "npm"
+
+            - name: Install dependencies
+              run: npm ci
+
+            # Download all native artifacts
+            - name: Download Windows x64 binaries
+              uses: actions/download-artifact@v4
+              with:
+                  name: native-win32_x64
+                  path: native-bundle/win32_x64
+
+            - name: Download macOS x64 binaries
+              uses: actions/download-artifact@v4
+              with:
+                  name: native-darwin_x64
+                  path: native-bundle/darwin_x64
+
+            - name: Download macOS arm64 binaries
+              uses: actions/download-artifact@v4
+              with:
+                  name: native-darwin_arm64
+                  path: native-bundle/darwin_arm64
+
+            - name: Download Linux x64 binaries
+              uses: actions/download-artifact@v4
+              with:
+                  name: native-linux_x64
+                  path: native-bundle/linux_x64
+
+            - name: List all downloaded binaries
+              run: find native-bundle -type f -exec ls -la {} \;
+
+            # Build plugin
+            - name: Build plugin
+              run: npm run build
+
+            # Get version from tag or manifest
+            - name: Get version
+              id: version
+              run: |
+                  if [ -n "${{ github.event.inputs.version }}" ]; then
+                    VERSION="${{ github.event.inputs.version }}"
+                  elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+                    VERSION="${GITHUB_REF#refs/tags/}"
+                    VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+                  else
+                    VERSION=$(node -p "require('./manifest.json').version")
+                  fi
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "Version: $VERSION"
+
+            # Create native bundle ZIP (all platforms in one file)
+            - name: Create native bundle ZIP
+              run: |
+                  cd native-bundle
+                  zip -r "../${{ env.PLUGIN_NAME }}-v${{ steps.version.outputs.version }}.zip" .
+                  cd ..
+                  echo "=== ZIP contents ==="
+                  unzip -l "${{ env.PLUGIN_NAME }}-v${{ steps.version.outputs.version }}.zip"
+
+            # Prepare release directory
+            - name: Prepare release files
+              run: |
+                  mkdir -p release
+                  cp main.js release/
+                  cp pty-host.js release/
+                  cp manifest.json release/
+                  [ -f styles.css ] && cp styles.css release/ || touch release/styles.css
+                  cp "${{ env.PLUGIN_NAME }}-v${{ steps.version.outputs.version }}.zip" release/
+                  echo "=== Release files ==="
+                  ls -la release/
+
+            # Create GitHub Release
+            - name: Create Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  tag_name: v${{ steps.version.outputs.version }}
+                  name: Release v${{ steps.version.outputs.version }}
+                  draft: false
+                  prerelease: false
+                  generate_release_notes: true
+                  files: |
+                      release/main.js
+                      release/pty-host.js
+                      release/manifest.json
+                      release/styles.css
+                      release/${{ env.PLUGIN_NAME }}-v${{ steps.version.outputs.version }}.zip
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # ===========================================
+    # Cleanup artifacts
+    # ===========================================
+    cleanup:
+        needs: release
+        runs-on: ubuntu-latest
+        if: always()
+        steps:
+            - name: Delete artifacts
+              uses: geekyeggo/delete-artifact@v4
+              with:
+                  name: |
+                      native-win32_x64
+                      native-darwin_x64
+                      native-darwin_arm64
+                      native-linux_x64

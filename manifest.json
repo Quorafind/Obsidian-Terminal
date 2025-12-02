@@ -2,7 +2,7 @@
 	"id": "terminal-view",
 	"name": "Terminal View",
 	"version": "0.0.1",
-	"minAppVersion": "0.15.0",
+	"minAppVersion": "1.10.0",
 	"description": "Integrated terminal view for Obsidian using xterm.js and node-pty",
 	"author": "Terminal Plugin Developer",
 	"authorUrl": "https://github.com/terminal-plugin",

@@ -1,0 +1,119 @@
+/**
+ * Terminal Plugin Settings Styles
+ */
+
+/* Binary Status Table */
+.terminal-status-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin: 1em 0;
+	font-size: 0.9em;
+}
+
+.terminal-status-table td {
+	padding: 0.5em 1em;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.terminal-status-table td:first-child {
+	font-weight: 500;
+	width: 120px;
+	color: var(--text-muted);
+}
+
+/* Status indicators */
+.status-ok {
+	color: var(--color-green) !important;
+}
+
+.status-warning {
+	color: var(--color-orange) !important;
+}
+
+.status-error {
+	color: var(--color-red) !important;
+}
+
+/* File list */
+.file-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.file-list li {
+	padding: 0.2em 0;
+	font-family: var(--font-monospace);
+	font-size: 0.85em;
+}
+
+/* Progress display */
+.terminal-binary-progress {
+	margin: 1em 0;
+	padding: 1em;
+	background: var(--background-secondary);
+	border-radius: 8px;
+}
+
+.progress-info {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5em;
+}
+
+.progress-message {
+	color: var(--text-muted);
+	font-size: 0.9em;
+}
+
+.phase-checking,
+.phase-downloading,
+.phase-extracting {
+	color: var(--text-accent);
+}
+
+.phase-complete {
+	color: var(--color-green);
+}
+
+.phase-error {
+	color: var(--color-red);
+}
+
+/* Progress bar */
+.progress-bar {
+	width: 100%;
+	height: 6px;
+	background: var(--background-modifier-border);
+	border-radius: 3px;
+	overflow: hidden;
+}
+
+.progress-fill {
+	height: 100%;
+	background: var(--interactive-accent);
+	border-radius: 3px;
+	transition: width 0.3s ease;
+}
+
+/* Action buttons container */
+.terminal-binary-actions {
+	margin-top: 1em;
+}
+
+.terminal-binary-actions .setting-item {
+	border-top: none;
+	padding-top: 0.5em;
+}
+
+/* Section headers */
+.terminal-settings h2 {
+	margin-top: 2em;
+	margin-bottom: 1em;
+	padding-bottom: 0.5em;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.terminal-settings h2:first-of-type {
+	margin-top: 1em;
+}

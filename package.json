@@ -6,11 +6,29 @@
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"rebuild:electron": "node scripts/fix-electron-headers.mjs && node scripts/fix-winpty-cc.mjs && npx @electron/rebuild -m node_modules/node-pty && node scripts/copy-node-pty-binaries.mjs",
+		"build:all": "npm run rebuild:electron && npm run build",
+		"rebuild:electron": "node scripts/fix-electron-headers.mjs && node scripts/fix-winpty-cc.mjs && node scripts/fix-conpty-cc.mjs && npx @electron/rebuild -m node_modules/node-pty -v 37.10.2 && node scripts/copy-node-pty-binaries.mjs",
+		"rebuild:headers": "node scripts/fix-electron-headers.mjs",
+		"rebuild:winpty": "node scripts/fix-winpty-cc.mjs",
+		"rebuild:native": "npx @electron/rebuild -m node_modules/node-pty -v 37.10.2",
+		"rebuild:copy": "node scripts/copy-node-pty-binaries.mjs",
 		"embed": "node scripts/embed-native-modules.mjs",
-		"version": "node version-bump.mjs && git add manifest.json versions.json"
+		"lint:check": "eslint src --ext .ts --max-warnings 0 || exit 0",
+		"clean": "node -e \"const fs=require('fs'); ['main.js','main.js.map','styles.css'].forEach(f=>fs.existsSync(f)&&fs.unlinkSync(f))\"",
+		"prebuild": "npm run clean",
+		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"release": "release-it",
+		"release:dry": "release-it --dry-run",
+		"release:patch": "release-it patch",
+		"release:minor": "release-it minor",
+		"release:major": "release-it major"
 	},
-	"keywords": [],
+	"keywords": [
+		"obsidian",
+		"terminal",
+		"pty",
+		"xterm"
+	],
 	"author": "",
 	"license": "MIT",
 	"dependencies": {
@@ -22,12 +40,14 @@
 	},
 	"devDependencies": {
 		"@electron/rebuild": "^4.0.1",
+		"@release-it/conventional-changelog": "^9.0.0",
 		"@types/node": "^16.11.6",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
 		"builtin-modules": "3.3.0",
 		"esbuild": "0.14.47",
 		"obsidian": "latest",
+		"release-it": "^18.0.0",
 		"tslib": "2.4.0",
 		"typescript": "4.7.4"
 	}
