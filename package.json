@@ -1,6 +1,6 @@
 {
-	"name": "terminal-view",
-	"version": "0.0.1",
+	"name": "terminal",
+	"version": "0.1.0",
 	"description": "Integrated terminal view for Obsidian using ghostty-web and node-pty",
 	"main": "main.js",
 	"scripts": {
@@ -16,12 +16,7 @@
 		"lint:check": "eslint src --ext .ts --max-warnings 0 || exit 0",
 		"clean": "node -e \"const fs=require('fs'); ['main.js','main.js.map','styles.css'].forEach(f=>fs.existsSync(f)&&fs.unlinkSync(f))\"",
 		"prebuild": "npm run clean",
-		"version": "node version-bump.mjs && git add manifest.json versions.json",
-		"release": "release-it",
-		"release:dry": "release-it --dry-run",
-		"release:patch": "release-it patch",
-		"release:minor": "release-it minor",
-		"release:major": "release-it major"
+		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
 	"keywords": [
 		"obsidian",
@@ -29,13 +24,12 @@
 		"pty",
 		"xterm"
 	],
-	"author": "",
+	"author": "Boninall",
 	"license": "MIT",
 	"dependencies": {
 		"@xterm/addon-fit": "^0.10.0",
 		"@xterm/addon-web-links": "^0.11.0",
 		"@xterm/xterm": "^5.5.0",
-		"ghostty-web": "latest",
 		"node-pty": "^1.0.0"
 	},
 	"devDependencies": {

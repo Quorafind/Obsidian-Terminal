@@ -23,6 +23,7 @@ import {
 	COMMAND_OPEN_TERMINAL,
 	COMMAND_OPEN_TERMINAL_NAME,
 } from "@/constants";
+import "@/main.css";
 
 /**
  * Main plugin class for Obsidian Terminal
@@ -110,16 +111,18 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 		container.empty();
 		container.addClass("terminal-native-notice");
 
-		container.createEl("strong", { text: "Terminal 插件需要下载原生模块" });
+		container.createEl("strong", {
+			text: "Terminal plugin requires native modules",
+		});
 		container.createEl("br");
 		container.createEl("span", {
-			text: `平台: ${status.platformKey}`,
+			text: `Platform: ${status.platformKey}`,
 			cls: "notice-platform",
 		});
 		container.createEl("br");
 		container.createEl("br");
 
-		const btn = container.createEl("button", { text: "打开设置下载" });
+		const btn = container.createEl("button", { text: "Open Settings" });
 		btn.onclick = () => {
 			// Open plugin settings
 			(this.app as any).setting.open();
@@ -128,7 +131,7 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 		};
 
 		const closeBtn = container.createEl("button", {
-			text: "稍后",
+			text: "Later",
 			cls: "notice-close-btn",
 		});
 		closeBtn.style.marginLeft = "8px";
@@ -142,7 +145,7 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 		// Only register settings-related command
 		this.addCommand({
 			id: "open-settings",
-			name: "打开终端设置",
+			name: "Open Terminal Settings",
 			callback: () => {
 				(this.app as any).setting.open();
 				(this.app as any).setting.openTabById(PLUGIN_ID);
@@ -286,7 +289,7 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 		// Register additional commands
 		this.addCommand({
 			id: "close-terminal",
-			name: "关闭当前终端",
+			name: "Close Current Terminal",
 			checkCallback: (checking: boolean) => {
 				const activeLeaf =
 					this.app.workspace.getActiveViewOfType(TerminalView);
@@ -302,7 +305,7 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 
 		this.addCommand({
 			id: "focus-terminal",
-			name: "聚焦终端",
+			name: "Focus Terminal",
 			checkCallback: (checking: boolean) => {
 				const activeLeaf =
 					this.app.workspace.getActiveViewOfType(TerminalView);
@@ -318,7 +321,7 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 
 		this.addCommand({
 			id: "clear-terminal",
-			name: "清空终端",
+			name: "Clear Terminal",
 			checkCallback: (checking: boolean) => {
 				const activeLeaf =
 					this.app.workspace.getActiveViewOfType(TerminalView);

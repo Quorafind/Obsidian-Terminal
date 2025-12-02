@@ -14,7 +14,10 @@ import {
 	ButtonComponent,
 	Platform,
 } from "obsidian";
-import type TerminalPlugin from "../../main";
+
+// Import settings styles (will be bundled into styles.css)
+import "./settings-styles.css";
+import type TerminalPlugin from "@/main";
 import {
 	NativeBinaryManager,
 	type BinaryStatus,
@@ -67,8 +70,11 @@ export class TerminalSettingsTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
+		// Apply terminal theme class to container
+		containerEl.addClass("terminal-settings");
+
 		// Header
-		containerEl.createEl("h1", { text: "Terminal 设置" });
+		containerEl.createEl("h1", { text: "Terminal Settings" });
 
 		// Native Binary Section
 		this.displayBinarySection(containerEl);
@@ -84,7 +90,7 @@ export class TerminalSettingsTab extends PluginSettingTab {
 	 * Display native binary management section
 	 */
 	private displayBinarySection(containerEl: HTMLElement): void {
-		containerEl.createEl("h2", { text: "原生模块" });
+		containerEl.createEl("h2", { text: "Native Modules" });
 
 		const status = this.binaryManager.getStatus();
 		const platformKey = this.getPlatformKey();
@@ -105,14 +111,20 @@ export class TerminalSettingsTab extends PluginSettingTab {
 
 		// Download/Update button
 		new Setting(actionContainer)
-			.setName(status.installed ? "更新原生模块" : "下载原生模块")
+			.setName(
+				status.installed
+					? "Update Native Modules"
+					: "Download Native Modules",
+			)
 			.setDesc(
 				status.installed
-					? `当前版本: v${status.version} - 点击检查更新`
-					: "从 GitHub Release 下载原生模块以启用终端功能",
+					? `Current version: v${status.version} - Click to check for updates`
+					: "Download native modules from GitHub Release to enable terminal functionality",
 			)
 			.addButton((btn: ButtonComponent) => {
-				btn.setButtonText(status.installed ? "检查更新" : "下载安装")
+				btn.setButtonText(
+					status.installed ? "Check Updates" : "Download",
+				)
 					.setCta()
 					.onClick(async () => {
 						await this.downloadAndInstall(btn);
@@ -121,8 +133,8 @@ export class TerminalSettingsTab extends PluginSettingTab {
 
 		// GitHub repo setting
 		new Setting(actionContainer)
-			.setName("GitHub 仓库")
-			.setDesc("用于下载原生模块的 GitHub 仓库")
+			.setName("GitHub Repository")
+			.setDesc("GitHub repository for downloading native modules")
 			.addText((text) => {
 				text.setPlaceholder("user/repo")
 					.setValue(
@@ -141,14 +153,14 @@ export class TerminalSettingsTab extends PluginSettingTab {
 		// Cleanup button (only show if installed)
 		if (status.installed) {
 			new Setting(actionContainer)
-				.setName("清理模块")
-				.setDesc("删除已安装的原生模块文件")
+				.setName("Clean Up Modules")
+				.setDesc("Remove installed native module files")
 				.addButton((btn: ButtonComponent) => {
-					btn.setButtonText("清理")
+					btn.setButtonText("Clean Up")
 						.setWarning()
 						.onClick(async () => {
 							this.binaryManager.cleanup();
-							new Notice("原生模块已清理");
+							new Notice("Native modules cleaned up");
 							this.display();
 						});
 				});
@@ -166,7 +178,7 @@ export class TerminalSettingsTab extends PluginSettingTab {
 
 		// Platform info
 		const platformRow = statusDiv.createDiv({ cls: "status-row" });
-		platformRow.createSpan({ text: "当前平台: ", cls: "status-label" });
+		platformRow.createSpan({ text: "Platform: ", cls: "status-label" });
 		platformRow.createSpan({
 			text: status.platformKey,
 			cls: status.platformSupported ? "status-ok" : "status-error",
@@ -174,7 +186,7 @@ export class TerminalSettingsTab extends PluginSettingTab {
 
 		if (!status.platformSupported) {
 			statusDiv.createDiv({
-				text: `⚠️ 当前平台不受支持。支持的平台: ${MODULE_INFO.supportedPlatforms.join(", ")}`,
+				text: `⚠️ Current platform is not supported. Supported platforms: ${MODULE_INFO.supportedPlatforms.join(", ")}`,
 				cls: "status-warning",
 			});
 			return;
@@ -182,15 +194,18 @@ export class TerminalSettingsTab extends PluginSettingTab {
 
 		// Installation status
 		const installRow = statusDiv.createDiv({ cls: "status-row" });
-		installRow.createSpan({ text: "安装状态: ", cls: "status-label" });
+		installRow.createSpan({ text: "Status: ", cls: "status-label" });
 
 		if (status.installed) {
-			installRow.createSpan({ text: "✓ 已安装", cls: "status-ok" });
+			installRow.createSpan({ text: "✓ Installed", cls: "status-ok" });
 
 			// Version info
 			if (status.version) {
 				const versionRow = statusDiv.createDiv({ cls: "status-row" });
-				versionRow.createSpan({ text: "版本: ", cls: "status-label" });
+				versionRow.createSpan({
+					text: "Version: ",
+					cls: "status-label",
+				});
 				versionRow.createSpan({ text: `v${status.version}` });
 			}
 
@@ -205,12 +220,15 @@ export class TerminalSettingsTab extends PluginSettingTab {
 
 			// File list
 			const filesRow = statusDiv.createDiv({ cls: "status-row" });
-			filesRow.createSpan({ text: "文件: ", cls: "status-label" });
+			filesRow.createSpan({ text: "Files: ", cls: "status-label" });
 			filesRow.createSpan({ text: status.files.join(", ") });
 		} else {
-			installRow.createSpan({ text: "✗ 未安装", cls: "status-error" });
+			installRow.createSpan({
+				text: "✗ Not installed",
+				cls: "status-error",
+			});
 			statusDiv.createDiv({
-				text: "请点击下方按钮下载原生模块以启用终端功能",
+				text: "Click the button below to download native modules and enable terminal functionality",
 				cls: "status-hint",
 			});
 		}
@@ -243,11 +261,11 @@ export class TerminalSettingsTab extends PluginSettingTab {
 			});
 
 			const phaseMap: Record<string, string> = {
-				checking: "🔍 检查中",
-				downloading: "⬇️ 下载中",
-				extracting: "📦 解压中",
-				complete: "✅ 完成",
-				error: "❌ 错误",
+				checking: "🔍 Checking",
+				downloading: "⬇️ Downloading",
+				extracting: "📦 Extracting",
+				complete: "✅ Complete",
+				error: "❌ Error",
 			};
 
 			progressDiv.createEl("div", {
@@ -277,7 +295,7 @@ export class TerminalSettingsTab extends PluginSettingTab {
 	 */
 	private async downloadAndInstall(btn: ButtonComponent): Promise<void> {
 		btn.setDisabled(true);
-		btn.setButtonText("下载中...");
+		btn.setButtonText("Downloading...");
 
 		if (this.progressEl) {
 			this.progressEl.style.display = "block";
@@ -294,7 +312,9 @@ export class TerminalSettingsTab extends PluginSettingTab {
 				progressCallback,
 			);
 
-			new Notice("原生模块安装成功！请重新加载插件。");
+			new Notice(
+				"Native modules installed successfully! Please reload the plugin.",
+			);
 
 			// Refresh display
 			setTimeout(() => {
@@ -302,7 +322,7 @@ export class TerminalSettingsTab extends PluginSettingTab {
 			}, 1000);
 		} catch (error) {
 			console.error("Installation failed:", error);
-			new Notice(`安装失败: ${(error as Error).message}`);
+			new Notice(`Installation failed: ${(error as Error).message}`);
 
 			progressCallback({
 				phase: "error",
@@ -311,7 +331,7 @@ export class TerminalSettingsTab extends PluginSettingTab {
 			});
 		} finally {
 			btn.setDisabled(false);
-			btn.setButtonText("下载安装");
+			btn.setButtonText("Download");
 		}
 	}
 
@@ -319,11 +339,11 @@ export class TerminalSettingsTab extends PluginSettingTab {
 	 * Display appearance settings section
 	 */
 	private displayAppearanceSection(containerEl: HTMLElement): void {
-		containerEl.createEl("h2", { text: "外观设置" });
+		containerEl.createEl("h2", { text: "Appearance" });
 
 		new Setting(containerEl)
-			.setName("字体大小")
-			.setDesc("终端字体大小（像素）")
+			.setName("Font Size")
+			.setDesc("Terminal font size in pixels")
 			.addSlider((slider) => {
 				slider
 					.setLimits(10, 24, 1)
@@ -341,8 +361,8 @@ export class TerminalSettingsTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("字体系列")
-			.setDesc("终端使用的字体")
+			.setName("Font Family")
+			.setDesc("Font used in the terminal")
 			.addText((text) => {
 				text.setPlaceholder(DEFAULT_SETTINGS.fontFamily)
 					.setValue(this.plugin.settings?.fontFamily ?? "")
@@ -356,8 +376,8 @@ export class TerminalSettingsTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("光标闪烁")
-			.setDesc("启用光标闪烁效果")
+			.setName("Cursor Blink")
+			.setDesc("Enable cursor blinking effect")
 			.addToggle((toggle) => {
 				toggle
 					.setValue(
@@ -373,8 +393,8 @@ export class TerminalSettingsTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("滚动缓冲区")
-			.setDesc("保留的历史行数")
+			.setName("Scrollback")
+			.setDesc("Number of lines to keep in history")
 			.addSlider((slider) => {
 				slider
 					.setLimits(100, 10000, 100)
@@ -396,11 +416,11 @@ export class TerminalSettingsTab extends PluginSettingTab {
 	 * Display shell settings section
 	 */
 	private displayShellSection(containerEl: HTMLElement): void {
-		containerEl.createEl("h2", { text: "Shell 设置" });
+		containerEl.createEl("h2", { text: "Shell Settings" });
 
 		new Setting(containerEl)
-			.setName("默认 Shell")
-			.setDesc("留空使用系统默认 Shell")
+			.setName("Default Shell")
+			.setDesc("Leave empty to use system default shell")
 			.addText((text) => {
 				text.setPlaceholder(
 					Platform.isWin ? "powershell.exe" : "/bin/bash",
@@ -415,10 +435,12 @@ export class TerminalSettingsTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName("Shell 参数")
-			.setDesc("启动 Shell 时的额外参数（逗号分隔）")
+			.setName("Shell Arguments")
+			.setDesc(
+				"Additional arguments when starting the shell (comma separated)",
+			)
 			.addText((text) => {
-				text.setPlaceholder("例如: --login, -i")
+				text.setPlaceholder("e.g.: --login, -i")
 					.setValue(this.plugin.settings?.shellArgs?.join(", ") ?? "")
 					.onChange(async (value) => {
 						if (this.plugin.settings) {

@@ -27,7 +27,7 @@ ${xtermCss}
 
 /* CSS Variables inherited from Obsidian */
 :host {
-  --terminal-bg: var(--background-primary, #1e1e1e);
+  --terminal-bg: var(--background-secondary, #1e1e1e);
   --terminal-fg: var(--text-normal, #d4d4d4);
   --terminal-cursor: var(--text-accent, #569cd6);
   --terminal-selection: var(--text-selection, rgba(255, 255, 255, 0.3));
@@ -51,6 +51,11 @@ ${xtermCss}
 
 .xterm-viewport {
   overflow-y: auto !important;
+  background: var(--terminal-bg) !important;
+}
+
+.xterm-cursor {
+  outline-color: var(--text-accent);
 }
 
 .xterm-screen {
@@ -102,6 +107,10 @@ ${xtermCss}
 
 .xterm .composition-view.active {
   display: block !important;
+}
+
+.xterm-dom-renderer-owner-1 .xterm-screen .xterm-rows {
+  color: var(--terminal-fg);
 }
 `;
 
@@ -296,8 +305,9 @@ export class TerminalView extends BaseTerminalView {
 	 */
 	private createShadowDOM(): void {
 		// Create shadow host element
-		this.shadowHost = document.createElement("div");
-		this.shadowHost.className = "terminal-shadow-host";
+		this.shadowHost = createEl("div", {
+			cls: "terminal-shadow-host",
+		});
 		Object.assign(this.shadowHost.style, {
 			height: "100%",
 			width: "100%",
@@ -312,9 +322,9 @@ export class TerminalView extends BaseTerminalView {
 		this.shadowRoot.appendChild(styleEl);
 
 		// Create container inside shadow DOM
-		this.shadowContainer = document.createElement("div");
-		this.shadowContainer.className = "terminal-shadow-container";
-		this.shadowRoot.appendChild(this.shadowContainer);
+		this.shadowContainer = this.shadowRoot.createEl("div", {
+			cls: "terminal-shadow-container",
+		});
 
 		// Append shadow host to view container
 		this.terminalViewContainer.appendChild(this.shadowHost);
@@ -418,41 +428,34 @@ export class TerminalView extends BaseTerminalView {
 
 	/**
 	 * Get Obsidian theme colors for terminal
+	 * Uses CSS variables directly - they inherit through Shadow DOM
 	 */
 	private getObsidianTheme(): Record<string, string> {
-		const bodyStyle = getComputedStyle(document.body);
-
 		return {
-			background:
-				bodyStyle.getPropertyValue("--background-primary").trim() ||
-				"#1e1e1e",
-			foreground:
-				bodyStyle.getPropertyValue("--text-normal").trim() || "#d4d4d4",
-			cursor:
-				bodyStyle.getPropertyValue("--text-accent").trim() || "#569cd6",
-			cursorAccent:
-				bodyStyle.getPropertyValue("--background-primary").trim() ||
-				"#1e1e1e",
+			// Core colors from Obsidian theme
+			background: "var(--background-secondary, #1e1e1e)",
+			foreground: "var(--text-normal, #d4d4d4)",
+			cursor: "var(--text-accent, #569cd6)",
+			cursorAccent: "var(--background-secondary, #1e1e1e)",
 			selectionBackground:
-				bodyStyle.getPropertyValue("--text-selection").trim() ||
-				"rgba(255, 255, 255, 0.3)",
-			// Standard terminal colors
-			black: "#1e1e1e",
-			red: "#f44747",
-			green: "#6a9955",
-			yellow: "#dcdcaa",
-			blue: "#569cd6",
-			magenta: "#c586c0",
-			cyan: "#4ec9b0",
-			white: "#d4d4d4",
-			brightBlack: "#808080",
-			brightRed: "#f44747",
-			brightGreen: "#6a9955",
-			brightYellow: "#dcdcaa",
-			brightBlue: "#569cd6",
-			brightMagenta: "#c586c0",
-			brightCyan: "#4ec9b0",
-			brightWhite: "#ffffff",
+				"var(--text-selection, rgba(255, 255, 255, 0.3))",
+			// Terminal colors using Obsidian's color palette
+			black: "var(--color-base-00, #1e1e1e)",
+			red: "var(--color-red, #e93147)",
+			green: "var(--color-green, #08b94e)",
+			yellow: "var(--color-yellow, #e0ac00)",
+			blue: "var(--color-blue, #086ddd)",
+			magenta: "var(--color-purple, #7852ee)",
+			cyan: "var(--color-cyan, #00bfbc)",
+			white: "var(--color-base-70, #d4d4d4)",
+			brightBlack: "var(--color-base-50, #808080)",
+			brightRed: "var(--color-red, #e93147)",
+			brightGreen: "var(--color-green, #08b94e)",
+			brightYellow: "var(--color-yellow, #e0ac00)",
+			brightBlue: "var(--color-blue, #086ddd)",
+			brightMagenta: "var(--color-purple, #7852ee)",
+			brightCyan: "var(--color-cyan, #00bfbc)",
+			brightWhite: "var(--color-base-100, #ffffff)",
 		};
 	}
 
@@ -651,11 +654,11 @@ export class TerminalView extends BaseTerminalView {
 
 				const menu = new Menu();
 
-				// 复制选中文本
+				// Copy selected text
 				if (this.terminal.hasSelection()) {
 					menu.addItem((item) =>
 						item
-							.setTitle("复制")
+							.setTitle("Copy")
 							.setIcon("copy")
 							.onClick(() => {
 								const selection = this.terminal.getSelection();
@@ -673,10 +676,10 @@ export class TerminalView extends BaseTerminalView {
 					);
 				}
 
-				// 粘贴
+				// Paste
 				menu.addItem((item) =>
 					item
-						.setTitle("粘贴")
+						.setTitle("Paste")
 						.setIcon("clipboard-paste")
 						.onClick(() => {
 							navigator.clipboard
@@ -699,20 +702,20 @@ export class TerminalView extends BaseTerminalView {
 
 				menu.addSeparator();
 
-				// 清空终端
+				// Clear terminal
 				menu.addItem((item) =>
 					item
-						.setTitle("清空终端")
+						.setTitle("Clear")
 						.setIcon("trash-2")
 						.onClick(() => {
 							this.clear();
 						}),
 				);
 
-				// 全选
+				// Select all
 				menu.addItem((item) =>
 					item
-						.setTitle("全选")
+						.setTitle("Select All")
 						.setIcon("text-select")
 						.onClick(() => {
 							this.terminal.selectAll();
@@ -721,23 +724,22 @@ export class TerminalView extends BaseTerminalView {
 
 				menu.addSeparator();
 
-				// 重启终端
+				// Restart terminal
 				menu.addItem((item) =>
 					item
-						.setTitle("重启终端")
+						.setTitle("Restart")
 						.setIcon("refresh-cw")
 						.onClick(() => {
 							this.restartTerminal();
 						}),
 				);
 
-				// 新建终端（触发插件命令）
+				// New terminal (trigger plugin command)
 				menu.addItem((item) =>
 					item
-						.setTitle("新建终端")
+						.setTitle("New Terminal")
 						.setIcon("terminal")
 						.onClick(() => {
-							// 触发打开新终端命令
 							(this.app as any).commands.executeCommandById(
 								"obsidian-terminal-view:open-terminal",
 							);

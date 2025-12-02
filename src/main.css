@@ -1,0 +1,3 @@
+.mod-root .workspace-leaf-content[data-type="terminal-view"] .view-content {
+	background-color: var(--background-secondary);
+}

@@ -1,119 +1,381 @@
-/**
- * Terminal Plugin Settings Styles
- */
+/* =================================================================
+   TERMINAL PLUGIN SETTINGS - RETRO CRT THEME
+   Optimized for Obsidian v1.0+
+   ================================================================= */
 
-/* Binary Status Table */
+/* --- 1. VARIABLES & PALETTES --- */
+.terminal-settings {
+	/* Fonts */
+	--term-font: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+	--term-font-size: 13px;
+
+	/* Dark Mode (CRT Phosphor) Default */
+	--term-bg-primary: #0a0e14;
+	--term-bg-secondary: #0d1219;
+	--term-bg-card: rgba(0, 255, 65, 0.02); /* Very subtle green tint */
+	--term-bg-input: #000000;
+
+	--term-green: #00ff41;
+	--term-green-dim: #008f11;
+	--term-cyan: #00d4ff;
+	--term-amber: #ffb000;
+	--term-red: #ff3b3b;
+	--term-gray: #4a5568;
+	--term-border: #1e2d3d;
+
+	/* Effects */
+	--term-glow-green:
+		0 0 10px rgba(0, 255, 65, 0.4), 0 0 2px rgba(0, 255, 65, 0.2);
+	--term-glow-text: 0 0 4px rgba(0, 255, 65, 0.3);
+	--term-scanline-opacity: 0.15;
+	--term-border-style: 1px solid var(--term-green-dim);
+}
+
+/* Light Mode (Solarized Light) */
+.theme-light .terminal-settings {
+	--term-bg-primary: #fdf6e3;
+	--term-bg-secondary: #eee8d5;
+	--term-bg-card: rgba(0, 0, 0, 0.03);
+	--term-bg-input: #ffffff;
+
+	--term-green: #859900;
+	--term-green-dim: #6c7c00;
+	--term-cyan: #2aa198;
+	--term-amber: #b58900;
+	--term-red: #dc322f;
+	--term-gray: #93a1a1;
+	--term-border: #d3d3d3;
+
+	/* Disable Glow/CRT in Light Mode */
+	--term-glow-green: none;
+	--term-glow-text: none;
+	--term-scanline-opacity: 0;
+	--term-border-style: 1px solid var(--term-gray);
+}
+
+/* --- 2. BASE CONTAINER & CRT EFFECTS --- */
+.terminal-settings {
+	font-family: var(--term-font) !important;
+	font-size: var(--term-font-size);
+	background-color: var(--term-bg-primary);
+	color: var(--term-green);
+	padding: 20px;
+	position: relative;
+	/*overflow: hidden;*/
+	min-height: 100%;
+	/* Reset Obsidian Defaults */
+	--background-primary: var(--term-bg-primary);
+	--background-secondary: var(--term-bg-primary);
+	--text-normal: var(--term-green);
+	--text-muted: var(--term-green-dim);
+}
+
+/* Dark Mode Only: CRT Scanlines & Vignette */
+.theme-dark .terminal-settings::before {
+	content: " ";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: 0;
+	bottom: 0;
+	right: 0;
+	background:
+		linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+		linear-gradient(
+			90deg,
+			rgba(255, 0, 0, 0.06),
+			rgba(0, 255, 0, 0.02),
+			rgba(0, 0, 255, 0.06)
+		);
+	z-index: 2;
+	background-size:
+		100% 2px,
+		3px 100%;
+	pointer-events: none;
+	opacity: var(--term-scanline-opacity);
+}
+
+/* Vignette (Corner darkness) */
+.theme-dark .terminal-settings::after {
+	content: " ";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: 0;
+	bottom: 0;
+	right: 0;
+	background: radial-gradient(
+		circle,
+		rgba(0, 0, 0, 0) 60%,
+		rgba(0, 0, 0, 0.4) 100%
+	);
+	z-index: 2;
+	pointer-events: none;
+}
+
+/* --- 3. TYPOGRAPHY & HEADERS --- */
+.terminal-settings h1,
+.terminal-settings h2,
+.terminal-settings h3 {
+	font-family: var(--term-font);
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	border: none !important;
+}
+
+.terminal-settings h1 {
+	color: var(--term-cyan);
+	border-bottom: 2px solid var(--term-cyan) !important;
+	padding-bottom: 10px;
+	margin-bottom: 30px;
+	text-shadow: 0 0 5px rgba(0, 212, 255, 0.5);
+}
+.terminal-settings h1::before {
+	content: "root@obsidian:~# ./";
+	opacity: 0.7;
+}
+
+.terminal-settings h2 {
+	color: var(--term-amber);
+	font-size: 1.1em;
+	margin-top: 2em;
+	border-bottom: 1px dashed var(--term-amber) !important;
+}
+.terminal-settings h2::before {
+	content: ">> ";
+}
+
+/* --- 4. OBSIDIAN SETTING ITEMS --- */
+.terminal-settings .setting-item {
+	border-top: none;
+	border-bottom: 1px dashed var(--term-border);
+	padding: 15px 0;
+}
+
+.terminal-settings .setting-item-info {
+	font-family: var(--term-font);
+}
+
+.terminal-settings .setting-item-name {
+	font-size: 14px;
+	font-weight: bold;
+	color: var(--term-green);
+	text-shadow: var(--term-glow-text);
+}
+
+.terminal-settings .setting-item-description {
+	font-size: 11px;
+	color: var(--term-gray);
+	margin-top: 5px;
+}
+.terminal-settings .setting-item-description::before {
+	content: "// ";
+	opacity: 0.6;
+}
+
+/* --- 5. UI CONTROLS (The Fun Part) --- */
+
+/* Buttons */
+.terminal-settings button {
+	background: transparent !important;
+	border: 1px solid var(--term-green) !important;
+	border-radius: 0 !important;
+	color: var(--term-green) !important;
+	font-family: var(--term-font) !important;
+	text-transform: uppercase;
+	box-shadow: none !important;
+	transition: all 0.2s;
+	cursor: pointer;
+}
+.terminal-settings button:hover {
+	background: var(--term-green) !important;
+	color: #000 !important;
+	box-shadow: var(--term-glow-green) !important;
+	font-weight: bold;
+}
+.terminal-settings button.mod-cta {
+	border-color: var(--term-cyan) !important;
+	color: var(--term-cyan) !important;
+}
+.terminal-settings button.mod-cta:hover {
+	background: var(--term-cyan) !important;
+	box-shadow: 0 0 10px var(--term-cyan) !important;
+}
+.terminal-settings button.mod-warning {
+	border-color: var(--term-red) !important;
+	color: var(--term-red) !important;
+}
+
+/* Text Inputs & Textareas */
+.terminal-settings input[type="text"],
+.terminal-settings input[type="number"],
+.terminal-settings textarea {
+	background: var(--term-bg-input) !important;
+	border: 1px solid var(--term-gray) !important;
+	border-radius: 0 !important;
+	color: var(--term-green) !important;
+	font-family: var(--term-font) !important;
+	padding: 8px !important;
+}
+.terminal-settings input:focus,
+.terminal-settings textarea:focus {
+	border-color: var(--term-green) !important;
+	box-shadow: var(--term-glow-green) !important;
+	outline: none !important;
+}
+
+/* Toggle Switch - Custom Square Style */
+.terminal-settings .checkbox-container {
+	width: 45px !important;
+	height: 24px !important;
+	background: var(--term-bg-input) !important;
+	border: 1px solid var(--term-gray) !important;
+	border-radius: 0 !important;
+	position: relative;
+	box-shadow: none !important;
+}
+.terminal-settings .checkbox-container.is-enabled {
+	background: var(--term-bg-input) !important;
+	border-color: var(--term-green) !important;
+}
+/* The "Knob" */
+.terminal-settings .checkbox-container:after {
+	width: 16px !important;
+	height: 16px !important;
+	background: var(--term-gray) !important;
+	border-radius: 0 !important;
+	top: 3px !important;
+	left: 3px !important;
+	transition: left 0.1s steps(2) !important; /* Robot movement */
+	margin: 0;
+}
+.terminal-settings .checkbox-container.is-enabled:after {
+	background: var(--term-green) !important;
+	left: 24px !important;
+	box-shadow: var(--term-glow-green);
+	transform: unset;
+}
+/* ON/OFF Text Labels */
+.terminal-settings .checkbox-container:before {
+	content: "0";
+	position: absolute;
+	right: 5px;
+	top: 4px;
+	font-size: 10px;
+	color: var(--term-gray);
+	line-height: 1;
+}
+.terminal-settings .checkbox-container.is-enabled:before {
+	content: "1";
+	left: 6px;
+	right: auto;
+	color: var(--term-green);
+}
+
+/* Dropdowns */
+.terminal-settings select,
+.terminal-settings .dropdown {
+	background-color: var(--term-bg-input) !important;
+	color: var(--term-green) !important;
+	border: 1px solid var(--term-gray) !important;
+	border-radius: 0 !important;
+	font-family: var(--term-font) !important;
+	padding-right: 25px !important;
+	background-image: none !important; /* Remove native arrow */
+}
+/* Custom Arrow */
+.terminal-settings .dropdown-icon {
+	display: none;
+} /* Hide default */
+
+/* Sliders / Range */
+.terminal-settings input[type="range"] {
+	background: transparent !important;
+	height: 20px;
+}
+.terminal-settings input[type="range"]::-webkit-slider-runnable-track {
+	background: var(--term-gray);
+	height: 2px;
+}
+.terminal-settings input[type="range"]::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	margin-top: 0;
+	height: 16px;
+	width: 10px;
+	background: var(--term-bg-primary);
+	border: 1px solid var(--term-green);
+	border-radius: 0;
+	box-shadow: var(--term-glow-green);
+}
+
+/* --- 6. STATUS TABLES & INFO BOXES --- */
+.terminal-status-card {
+	border: 1px solid var(--term-green);
+	padding: 15px;
+	margin: 20px 0;
+	background: var(--term-bg-card);
+	position: relative;
+}
+.terminal-status-card::before {
+	content: " SYSTEM_STATUS ";
+	position: absolute;
+	top: -10px;
+	left: 10px;
+	background: var(--term-bg-primary);
+	padding: 0 10px;
+	color: var(--term-green);
+	font-size: 0.9em;
+}
+
 .terminal-status-table {
 	width: 100%;
 	border-collapse: collapse;
-	margin: 1em 0;
-	font-size: 0.9em;
 }
-
 .terminal-status-table td {
-	padding: 0.5em 1em;
-	border-bottom: 1px solid var(--background-modifier-border);
+	padding: 5px 10px;
+	border-bottom: 1px dashed var(--term-gray);
 }
-
 .terminal-status-table td:first-child {
-	font-weight: 500;
-	width: 120px;
-	color: var(--text-muted);
+	color: var(--term-cyan);
+	font-weight: bold;
+	width: 140px;
+}
+.terminal-status-table td:first-child::after {
+	content: ":";
 }
 
-/* Status indicators */
+/* Status Indicators */
 .status-ok {
-	color: var(--color-green) !important;
+	color: var(--term-green);
 }
-
-.status-warning {
-	color: var(--color-orange) !important;
+.status-ok::before {
+	content: "[OK] ";
 }
-
 .status-error {
-	color: var(--color-red) !important;
+	color: var(--term-red);
+}
+.status-error::before {
+	content: "[ERR] ";
+}
+.status-warning {
+	color: var(--term-amber);
+}
+.status-warning::before {
+	content: "[warn] ";
 }
 
-/* File list */
-.file-list {
-	list-style: none;
-	padding: 0;
-	margin: 0;
+/* --- 7. SCROLLBARS --- */
+.terminal-settings::-webkit-scrollbar {
+	width: 10px;
 }
-
-.file-list li {
-	padding: 0.2em 0;
-	font-family: var(--font-monospace);
-	font-size: 0.85em;
+.terminal-settings::-webkit-scrollbar-track {
+	background: var(--term-bg-secondary);
+	border-left: 1px solid var(--term-border);
 }
-
-/* Progress display */
-.terminal-binary-progress {
-	margin: 1em 0;
-	padding: 1em;
-	background: var(--background-secondary);
-	border-radius: 8px;
+.terminal-settings::-webkit-scrollbar-thumb {
+	background: var(--term-gray);
+	border: 1px solid var(--term-bg-primary);
 }
-
-.progress-info {
-	display: flex;
-	flex-direction: column;
-	gap: 0.5em;
-}
-
-.progress-message {
-	color: var(--text-muted);
-	font-size: 0.9em;
-}
-
-.phase-checking,
-.phase-downloading,
-.phase-extracting {
-	color: var(--text-accent);
-}
-
-.phase-complete {
-	color: var(--color-green);
-}
-
-.phase-error {
-	color: var(--color-red);
-}
-
-/* Progress bar */
-.progress-bar {
-	width: 100%;
-	height: 6px;
-	background: var(--background-modifier-border);
-	border-radius: 3px;
-	overflow: hidden;
-}
-
-.progress-fill {
-	height: 100%;
-	background: var(--interactive-accent);
-	border-radius: 3px;
-	transition: width 0.3s ease;
-}
-
-/* Action buttons container */
-.terminal-binary-actions {
-	margin-top: 1em;
-}
-
-.terminal-binary-actions .setting-item {
-	border-top: none;
-	padding-top: 0.5em;
-}
-
-/* Section headers */
-.terminal-settings h2 {
-	margin-top: 2em;
-	margin-bottom: 1em;
-	padding-bottom: 0.5em;
-	border-bottom: 1px solid var(--background-modifier-border);
-}
-
-.terminal-settings h2:first-of-type {
-	margin-top: 1em;
+.terminal-settings::-webkit-scrollbar-thumb:hover {
+	background: var(--term-green);
 }
