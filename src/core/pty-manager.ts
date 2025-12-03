@@ -66,11 +66,9 @@ export class PTYManager extends BasePTYManager {
 				);
 			}
 
-			console.log("📦 Calling nodePty.spawn...");
-
 			// Create PTY process with UTF-8 support
-			// Note: useConpty is disabled because conpty.node may not be available
-			// in the plugin's node_modules. WinPTY (pty.node) is used instead.
+			// ConPTY (Windows Pseudo Console) is required for proper emoji rendering
+			// WinPTY does not support emoji/wide characters correctly
 			const pty = nodePty.spawn(options.shell, options.args, {
 				name: "xterm-256color",
 				cols: options.cols,
@@ -78,10 +76,13 @@ export class PTYManager extends BasePTYManager {
 				cwd: options.cwd,
 				env: options.env,
 				encoding: "utf8",
-				useConpty: false, // Force WinPTY - conpty.node may not be compiled
+				useConpty: true, // Enable ConPTY for native UTF-8 and emoji support
 			}) as IPty;
 
-			console.log("✅ PTY spawned successfully, pid:", pty.pid);
+			console.log(
+				"✅ PTY spawned successfully (ConPTY enabled), pid:",
+				pty.pid,
+			);
 
 			// Track the PTY process
 			this.activePTYs.add(pty);

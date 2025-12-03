@@ -14,20 +14,19 @@
 
 ## ✨ Features
 
-- **🖥️ Integrated Terminal View**: Open terminal instances directly within Obsidian panes.
-- **🚀 Multi-Terminal Support**: Run multiple terminal sessions simultaneously.
-- **🎨 Theme Integration**: Terminal colors automatically adapt to your current Obsidian theme (Light/Dark mode).
-- **🐚 Custom Shell Configuration**: Configure your preferred shell (PowerShell, Bash, Zsh, CMD) and startup arguments.
-- **📦 Smart Native Binaries**: Automatically detects your platform and manages native dependencies via GitHub Releases—no local compilation required.
-- **🔗 Link Support**: Clickable web links within the terminal output.
-- **💻 Cross-Platform**: Full support for Windows, macOS (Intel & Apple Silicon), and Linux.
+- **Integrated Terminal View**: Open terminal instances directly within Obsidian panes.
+- **Multi-Terminal Support**: Run multiple terminal sessions simultaneously.
+- **Theme Integration**: Terminal colors automatically adapt to your current Obsidian theme (Light/Dark mode).
+- **Custom Shell Configuration**: Configure your preferred shell (PowerShell, Bash, Zsh, CMD) and startup arguments.
+- **Some Features**: new tab, clear screen, copy/paste
+- **Cross-Platform**: Full support for Windows, macOS (Intel & Apple Silicon), and Linux.
 
-## 📸 Screenshots
+## Screenshots
 
 <!-- Add your screenshots here -->
-![Terminal Preview](https://via.placeholder.com/800x400?text=Terminal+Preview+Placeholder)
+![Terminal Preview](assets/terminal.jpg)
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Component | Version | Description |
 | :--- | :--- | :--- |
@@ -36,12 +35,12 @@
 | [@xterm/addon-fit](https://www.npmjs.com/package/@xterm/addon-fit) | v0.10.0 | Auto-resize support |
 | [@xterm/addon-web-links](https://www.npmjs.com/package/@xterm/addon-web-links) | v0.11.0 | Clickable links |
 
-## ⚙️ Requirements
+## Requirements
 
 - **Obsidian**: v1.10.0 or higher
 - **Platform**: Windows (x64), macOS (x64/arm64), Linux (x64)
 
-## 💿 Installation
+## Installation
 
 ### Method 1: Community Plugins (Recommended) [But not available yet]
 
@@ -68,7 +67,7 @@
    ```
 3. Reload Obsidian and enable the plugin in settings.
 
-## 🚀 Usage
+## Usage
 
 ### Open Terminal
 
@@ -88,7 +87,7 @@
 | `Ctrl/Cmd + V` | Paste from clipboard |
 | `Ctrl/Cmd + Shift + C` | Copy (when selection exists) |
 
-## ⚙️ Configuration
+## Configuration
 
 Go to **Settings > Terminal** to customize your experience.
 
@@ -181,7 +180,7 @@ src/
 └── types/                  # TypeScript type definitions
 ```
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome!
 
@@ -193,7 +192,7 @@ Contributions are welcome!
 
 Please follow [Conventional Commits](https://www.conventionalcommits.org/) for commit messages.
 
-## 📄 License
+## License
 
 Distributed under the **MIT License**. See [LICENSE](LICENSE) for more information.
 
@@ -206,5 +205,5 @@ Distributed under the **MIT License**. See [LICENSE](LICENSE) for more informati
 ---
 
 <p align="center">
-  Made with ❤️ by <a href="https://github.com/Boninall">Boninall</a>
+  Made with ❤️ by <a href="https://boninall.com">Boninall</a>
 </p>

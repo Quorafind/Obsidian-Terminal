@@ -6,7 +6,9 @@
 /* --- 1. VARIABLES & PALETTES --- */
 .terminal-settings {
 	/* Fonts */
-	--term-font: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+	--term-font:
+		"JetBrains Mono", "Fira Code", "Consolas", "Apple Color Emoji",
+		"Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", monospace;
 	--term-font-size: 13px;
 
 	/* Dark Mode (CRT Phosphor) Default */
