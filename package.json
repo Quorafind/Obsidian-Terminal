@@ -1,6 +1,6 @@
 {
 	"name": "terminal",
-	"version": "0.1.8",
+	"version": "0.1.9",
 	"description": "Integrated terminal view for Obsidian using ghostty-web and node-pty",
 	"main": "main.js",
 	"scripts": {
