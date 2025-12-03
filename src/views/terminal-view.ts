@@ -496,15 +496,69 @@ export class TerminalView extends BaseTerminalView {
 				case "PageDown":
 					data = "\x1b[6~";
 					break;
+				case "Insert":
+					data = "\x1b[2~";
+					break;
+				case "F1":
+					data = "\x1bOP";
+					break;
+				case "F2":
+					data = "\x1bOQ";
+					break;
+				case "F3":
+					data = "\x1bOR";
+					break;
+				case "F4":
+					data = "\x1bOS";
+					break;
+				case "F5":
+					data = "\x1b[15~";
+					break;
+				case "F6":
+					data = "\x1b[17~";
+					break;
+				case "F7":
+					data = "\x1b[18~";
+					break;
+				case "F8":
+					data = "\x1b[19~";
+					break;
+				case "F9":
+					data = "\x1b[20~";
+					break;
+				case "F10":
+					data = "\x1b[21~";
+					break;
+				case "F11":
+					data = "\x1b[23~";
+					break;
+				case "F12":
+					data = "\x1b[24~";
+					break;
 			}
 
 			// Handle Ctrl+key combinations
 			if (e.ctrlKey && key.length === 1) {
 				const charCode = key.toUpperCase().charCodeAt(0);
 				if (charCode >= 65 && charCode <= 90) {
-					// A-Z
+					// A-Z -> Ctrl+A to Ctrl+Z
 					data = String.fromCharCode(charCode - 64);
+				} else if (key === "[") {
+					data = "\x1b"; // Ctrl+[ = Escape
+				} else if (key === "\\") {
+					data = "\x1c"; // Ctrl+\
+				} else if (key === "]") {
+					data = "\x1d"; // Ctrl+]
+				} else if (key === "^" || key === "6") {
+					data = "\x1e"; // Ctrl+^
+				} else if (key === "_" || key === "-") {
+					data = "\x1f"; // Ctrl+_
 				}
+			}
+
+			// Handle Alt+key combinations (send ESC prefix)
+			if (e.altKey && !e.ctrlKey && !e.metaKey && key.length === 1) {
+				data = "\x1b" + key;
 			}
 
 			if (data !== null) {
@@ -513,17 +567,30 @@ export class TerminalView extends BaseTerminalView {
 				if (this.terminalSession.ptyProcess) {
 					this.terminalSession.ptyProcess.write(data);
 				}
+				// Clear textarea to prevent accumulation
+				if (this.imeTextarea) {
+					this.imeTextarea.value = "";
+				}
 				return;
 			}
 
-			// For printable characters (single char, no ctrl/alt/meta), let input event handle it
+			// For printable characters (single char, no ctrl/alt/meta),
+			// send directly to PTY instead of relying on input event
 			if (key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-				// Will be handled by input event
+				e.preventDefault();
+				e.stopPropagation();
+				if (this.terminalSession.ptyProcess) {
+					this.terminalSession.ptyProcess.write(key);
+				}
+				// Clear textarea to prevent accumulation
+				if (this.imeTextarea) {
+					this.imeTextarea.value = "";
+				}
 				return;
 			}
 		};
 
-		// Handle input events (for non-composition input that goes through textarea)
+		// Handle input events (backup for any input that bypasses keydown)
 		const onInput = (e: Event) => {
 			if (this.isComposing) return; // Skip during composition
 			const target = e.target as HTMLTextAreaElement;
@@ -1004,11 +1071,11 @@ export class TerminalView extends BaseTerminalView {
 		this.isRestarting = true;
 
 		try {
-			// Clear session
+			// Clear shell session cache
 			const sessionKey = this.getSessionKey();
 			shellSessions.delete(sessionKey);
 
-			// Dispose old terminal
+			// Dispose old terminal UI
 			this.disposeTerminal();
 
 			// Reset state
@@ -1023,9 +1090,18 @@ export class TerminalView extends BaseTerminalView {
 				this.shadowContainer = null;
 			}
 
-			// Reinitialize
+			// Restart PTY session via manager (kills old PTY, creates new one)
+			const newSession =
+				await this.plugin.terminalManager.restartTerminal(
+					this.terminalSession.id,
+				);
+			this.terminalSession = newSession;
+
+			// Reinitialize terminal UI
 			await this.initializeTerminal();
 			this.isInitialized = true;
+
+			console.log("✅ Terminal restarted successfully");
 		} catch (error) {
 			console.error("Failed to restart terminal:", error);
 			this.handleTerminalError(error as Error);

@@ -149,15 +149,15 @@ export class PTYManager extends BasePTYManager {
 				// Remove from tracking
 				this.activePTYs.delete(pty);
 
+				// Remove all listeners BEFORE killing to prevent exit event handling
+				pty.removeAllListeners();
+
 				// Kill the process
 				try {
 					pty.kill();
 				} catch (error) {
 					console.warn("Failed to kill PTY process:", error);
 				}
-
-				// Remove all listeners to prevent memory leaks
-				pty.removeAllListeners();
 			}
 		} catch (error) {
 			throw new TerminalPluginError(

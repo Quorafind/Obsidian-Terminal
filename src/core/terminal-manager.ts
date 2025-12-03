@@ -85,28 +85,21 @@ export class TerminalManager extends BaseTerminalManager {
 			// Mark session as inactive
 			session.isActive = false;
 
-			// Clean up PTY process
+			// Remove from sessions map BEFORE killing PTY
+			// This ensures exit handler will ignore the event
+			this.terminals.delete(id);
+
+			// Clean up view reference
+			if (session.view) {
+				session.view = undefined;
+			}
+
+			// Clean up PTY process (kill after removing from map)
 			try {
 				this.ptyManager.destroyPTY(session.ptyProcess);
 			} catch (error) {
 				console.warn(`Failed to destroy PTY for session ${id}:`, error);
 			}
-
-			// Clean up view if it exists
-			if (session.view) {
-				try {
-					// The view will handle its own cleanup
-					session.view = undefined;
-				} catch (error) {
-					console.warn(
-						`Failed to cleanup view for session ${id}:`,
-						error,
-					);
-				}
-			}
-
-			// Remove from sessions map
-			this.terminals.delete(id);
 
 			console.log(`Terminal session ${id} destroyed`);
 		} catch (error) {
@@ -250,6 +243,16 @@ export class TerminalManager extends BaseTerminalManager {
 
 		// Handle PTY process exit
 		ptyProcess.on("exit", (exitCode: number, signal?: number) => {
+			// Check if this session is still valid (not replaced by restart)
+			const currentSession = this.terminals.get(id);
+			if (!currentSession || currentSession.ptyProcess !== ptyProcess) {
+				// Session was replaced or removed, ignore this exit event
+				console.log(
+					`PTY exit event ignored for replaced session ${id}`,
+				);
+				return;
+			}
+
 			console.log(
 				`PTY process for session ${id} exited with code ${exitCode}, signal ${signal}`,
 			);
@@ -269,6 +272,13 @@ export class TerminalManager extends BaseTerminalManager {
 
 		// Handle PTY process errors
 		ptyProcess.on("error", (error: Error) => {
+			// Check if this session is still valid (not replaced by restart)
+			const currentSession = this.terminals.get(id);
+			if (!currentSession || currentSession.ptyProcess !== ptyProcess) {
+				// Session was replaced or removed, ignore this error event
+				return;
+			}
+
 			console.error(`PTY process error for session ${id}:`, error);
 
 			// Mark session as inactive
