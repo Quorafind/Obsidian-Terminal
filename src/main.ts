@@ -1,10 +1,4 @@
-import {
-	Plugin,
-	WorkspaceLeaf,
-	Notice,
-	Platform,
-	Menu,
-} from "obsidian";
+import { Plugin, WorkspaceLeaf, Notice, Platform, Menu } from "obsidian";
 import * as path from "path";
 import {
 	ITerminalPlugin,
@@ -42,7 +36,7 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 	themeColors: Record<string, string> = {};
 
 	private electronBridge!: ElectronBridge;
-	private ptyManager!: PTYManager;
+	public ptyManager!: PTYManager;
 	private binaryManager!: NativeBinaryManager;
 	private _pluginDir: string = "";
 	private _nativeModulesReady: boolean = false;
@@ -528,7 +522,7 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 			// Alternative approach - use manifest.dir directly if available
 			if (this.manifest.dir) {
 				const fallbackPath = this.normalizePluginPath(
-					path.join(process.cwd(), this.manifest.dir)
+					path.join(process.cwd(), this.manifest.dir),
 				);
 				console.log("📂 Using manifest.dir as fallback:", fallbackPath);
 				return fallbackPath;

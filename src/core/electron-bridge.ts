@@ -245,9 +245,10 @@ export class ElectronBridge extends BaseElectronBridge {
 	}
 
 	/**
-	 * Validate if a shell exists and is executable
+	 * Validate if a shell exists and is executable (Synchronous)
+	 * Uses fs.accessSync with X_OK flag to check execution permission
 	 */
-	async validateShell(shellPath: string): Promise<boolean> {
+	validateShellSync(shellPath: string): boolean {
 		try {
 			const fs = this.requireModule("fs");
 			const proc = this.getProcess();
@@ -260,12 +261,31 @@ export class ElectronBridge extends BaseElectronBridge {
 				) {
 					return true;
 				}
+				return fs.existsSync(shellPath);
 			}
 
-			return fs.existsSync(shellPath);
-		} catch {
+			// On macOS/Linux, check for execution permission (X_OK)
+			// This is crucial to prevent "posix_spawnp failed" errors
+			try {
+				fs.accessSync(shellPath, fs.constants.X_OK);
+				return true;
+			} catch {
+				console.warn(
+					`Shell validation failed for ${shellPath}: No execution permission or file not found.`,
+				);
+				return false;
+			}
+		} catch (error) {
+			console.error("Shell validation error:", error);
 			return false;
 		}
+	}
+
+	/**
+	 * Validate if a shell exists and is executable
+	 */
+	async validateShell(shellPath: string): Promise<boolean> {
+		return this.validateShellSync(shellPath);
 	}
 
 	/**

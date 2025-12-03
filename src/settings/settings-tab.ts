@@ -493,14 +493,74 @@ export class TerminalSettingsTab extends PluginSettingTab {
 	private displayShellSection(containerEl: HTMLElement): void {
 		containerEl.createEl("h2", { text: "Shell Settings" });
 
+		// Get available shells from PTYManager
+		const alternatives =
+			this.plugin.ptyManager?.getAlternativeShells() ?? [];
+		const currentShell = this.plugin.settings?.defaultShell || "";
+
+		// Determine initial dropdown state
+		let selectedOption = "custom";
+		if (currentShell === "") {
+			selectedOption = "default";
+		} else if (alternatives.includes(currentShell)) {
+			selectedOption = currentShell;
+		}
+
+		// Container for the Custom Shell Input (to toggle visibility)
+		const customShellContainer = containerEl.createDiv();
+		let customShellText: any;
+
+		// 1. Shell Preset Dropdown
 		new Setting(containerEl)
 			.setName("Default Shell")
-			.setDesc("Leave empty to use system default shell")
+			.setDesc(
+				"Select a detected shell or choose 'Custom' to enter a path manually.",
+			)
+			.addDropdown((dropdown) => {
+				dropdown.addOption("default", "System Default");
+				alternatives.forEach((shell) => {
+					// Show friendly name for common shells
+					const name = this.getShellDisplayName(shell);
+					dropdown.addOption(shell, name);
+				});
+				dropdown.addOption("custom", "Custom...");
+
+				dropdown.setValue(selectedOption);
+
+				dropdown.onChange(async (value) => {
+					if (value === "custom") {
+						customShellContainer.style.display = "block";
+					} else {
+						customShellContainer.style.display = "none";
+
+						if (this.plugin.settings) {
+							this.plugin.settings.defaultShell =
+								value === "default" ? "" : value;
+							await this.plugin.saveSettings();
+						}
+
+						// Sync text input
+						if (customShellText) {
+							customShellText.setValue(
+								this.plugin.settings?.defaultShell ?? "",
+							);
+						}
+					}
+				});
+			});
+
+		// 2. Custom Shell Path Input
+		new Setting(customShellContainer)
+			.setName("Custom Shell Path")
+			.setDesc("Absolute path to the shell executable")
 			.addText((text) => {
+				customShellText = text;
 				text.setPlaceholder(
-					Platform.isWin ? "powershell.exe" : "/bin/bash",
+					Platform.isWin
+						? "C:\\Windows\\System32\\powershell.exe"
+						: "/usr/local/bin/fish",
 				)
-					.setValue(this.plugin.settings?.defaultShell ?? "")
+					.setValue(currentShell)
 					.onChange(async (value) => {
 						if (this.plugin.settings) {
 							this.plugin.settings.defaultShell = value;
@@ -509,6 +569,12 @@ export class TerminalSettingsTab extends PluginSettingTab {
 					});
 			});
 
+		// Set initial visibility
+		if (selectedOption !== "custom") {
+			customShellContainer.style.display = "none";
+		}
+
+		// 3. Shell Arguments
 		new Setting(containerEl)
 			.setName("Shell Arguments")
 			.setDesc(
@@ -527,5 +593,22 @@ export class TerminalSettingsTab extends PluginSettingTab {
 						}
 					});
 			});
+	}
+
+	/**
+	 * Get display name for shell path
+	 */
+	private getShellDisplayName(shellPath: string): string {
+		const basename = shellPath.split(/[/\\]/).pop() || shellPath;
+		const nameMap: Record<string, string> = {
+			zsh: "Zsh",
+			bash: "Bash",
+			sh: "Shell (sh)",
+			fish: "Fish",
+			"powershell.exe": "PowerShell",
+			"pwsh.exe": "PowerShell Core",
+			"cmd.exe": "Command Prompt",
+		};
+		return nameMap[basename] || shellPath;
 	}
 }

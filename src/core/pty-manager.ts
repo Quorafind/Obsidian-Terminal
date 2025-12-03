@@ -108,6 +108,19 @@ export class PTYManager extends BasePTYManager {
 			console.error("❌ Error message:", (error as Error)?.message);
 			console.error("❌ Error stack:", (error as Error)?.stack);
 
+			// Provide hints for common errors
+			const errorMsg = (error as Error)?.message || "";
+			if (errorMsg.includes("posix_spawnp")) {
+				console.error(
+					"💡 Hint: posix_spawnp failed usually means the shell path is invalid or lacks execution permissions.",
+				);
+				console.error(
+					"💡 Tried shell:",
+					options.shell,
+					"- Please verify this path exists and is executable.",
+				);
+			}
+
 			if (error instanceof TerminalPluginError) {
 				throw error;
 			}
@@ -239,9 +252,9 @@ export class PTYManager extends BasePTYManager {
 	 */
 	private validateShellPath(shellPath: string): boolean {
 		try {
-			// Use the electron bridge's validation method
-			return true; // For now, assume shell is valid
+			return this.electronBridge.validateShellSync(shellPath);
 		} catch (error) {
+			console.warn("Shell validation check failed:", error);
 			return false;
 		}
 	}
