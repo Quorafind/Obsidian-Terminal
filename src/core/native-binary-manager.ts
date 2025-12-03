@@ -234,16 +234,16 @@ export class NativeBinaryManager {
 		const release = response.json;
 		const version = release.tag_name.replace(/^v/, "");
 
-		// Find the native bundle asset
+		// Find the native bundle asset for the current platform
+		// Naming format: obsidian-terminal-v1.0.0-native-win32_x64.zip
+		const assetName = `obsidian-terminal-v${version}-native-${this.platformKey}.zip`;
 		const bundleAsset = release.assets?.find(
-			(a: { name: string }) =>
-				a.name.startsWith("obsidian-terminal-v") &&
-				a.name.endsWith(".zip"),
+			(a: { name: string }) => a.name === assetName,
 		);
 
 		if (!bundleAsset) {
 			throw new Error(
-				"Release does not contain native module bundle (obsidian-terminal-v*.zip)",
+				`Release does not contain native module bundle for your platform (${assetName})`,
 			);
 		}
 
@@ -384,107 +384,41 @@ export class NativeBinaryManager {
 	}
 
 	/**
-	 * Install binaries from local ZIP file
+	 * Install from local ZIP file (auto-detects type)
+	 *
+	 * Supports two ZIP types:
+	 * - Native Module ZIP: Contains node-pty/package.json
+	 * - Plugin Core ZIP: Contains manifest.json and main.js at root
 	 */
 	async installFromLocalZip(
 		zipBuffer: ArrayBuffer,
 		onProgress?: ProgressCallback,
 	): Promise<void> {
 		onProgress?.({
-			phase: "extracting",
-			message: "Extracting native modules from local file...",
-			percent: 10,
+			phase: "checking",
+			message: "Analyzing ZIP file...",
+			percent: 5,
 		});
 
 		try {
-			// Check platform support first
-			if (!isPlatformSupported()) {
-				const supported = (
-					MODULE_INFO.supportedPlatforms as readonly string[]
-				).join(", ");
-				throw new Error(
-					`Platform ${this.platformKey} is not supported. Supported: ${supported}`,
-				);
-			}
-
-			// Clean up existing node-pty directory
-			if (existsSync(this.nodePtyDir)) {
-				rmSync(this.nodePtyDir, { recursive: true, force: true });
-			}
-
-			// Ensure directories exist
-			mkdirSync(join(this.nodePtyDir, "build", "Release"), {
-				recursive: true,
-			});
-			mkdirSync(join(this.nodePtyDir, "lib"), { recursive: true });
-
-			onProgress?.({
-				phase: "extracting",
-				message: "Extracting files...",
-				percent: 30,
-			});
-
-			// Extract ZIP
 			const buffer = Buffer.from(zipBuffer);
-			await this.extractNodePtyZip(buffer, this.platformKey);
+			const files = await this.parseZip(buffer);
 
-			onProgress?.({
-				phase: "extracting",
-				message: "Verifying installation...",
-				percent: 70,
-			});
+			// Detect ZIP type by checking for signature files
+			const isNativeBundle = "node-pty/package.json" in files;
+			const isCoreBundle = "manifest.json" in files && "main.js" in files;
 
-			// Verify structure
-			const expectedBinaries = PLATFORM_BINARIES[this.platformKey] || [];
-			const extractedFiles: Array<{ name: string; size: number }> = [];
-			const missingFiles: string[] = [];
-
-			// Check package.json
-			if (!existsSync(join(this.nodePtyDir, "package.json"))) {
-				missingFiles.push("package.json");
-			}
-
-			// Check lib/index.js
-			if (!existsSync(join(this.nodePtyDir, "lib", "index.js"))) {
-				missingFiles.push("lib/index.js");
-			}
-
-			// Check binaries
-			for (const file of expectedBinaries) {
-				const filePath = join(
-					this.nodePtyDir,
-					"build",
-					"Release",
-					file,
-				);
-				if (!existsSync(filePath)) {
-					missingFiles.push(`build/Release/${file}`);
-				} else {
-					const stat = statSync(filePath);
-					extractedFiles.push({ name: file, size: stat.size });
-					console.log(`✅ Extracted: ${file}`);
-				}
-			}
-
-			if (missingFiles.length > 0) {
+			if (isNativeBundle) {
+				console.log("📦 Detected Native Module bundle");
+				await this.installNativeFromParsedZip(files, onProgress);
+			} else if (isCoreBundle) {
+				console.log("📦 Detected Plugin Core bundle");
+				await this.installCoreFromParsedZip(files, onProgress);
+			} else {
 				throw new Error(
-					`Missing files in ZIP: ${missingFiles.join(", ")}. Make sure the ZIP contains your platform (${this.platformKey}).`,
+					"Unknown ZIP format. Expected either 'node-pty/' folder (native bundle) or 'manifest.json' + 'main.js' (plugin core).",
 				);
 			}
-
-			// Write manifest (use "local" as version indicator)
-			this.writeManifest(
-				"local",
-				MODULE_INFO.electronVersion,
-				MODULE_INFO.nodeABI,
-				extractedFiles,
-			);
-
-			onProgress?.({
-				phase: "complete",
-				message: "Installation complete from local file",
-				percent: 100,
-			});
 		} catch (error) {
 			onProgress?.({
 				phase: "error",
@@ -496,31 +430,186 @@ export class NativeBinaryManager {
 	}
 
 	/**
-	 * Extract ZIP file containing complete node-pty structure
+	 * Install native modules from already-parsed ZIP files
+	 */
+	private async installNativeFromParsedZip(
+		files: Record<string, { dir: boolean; getData: () => Promise<Buffer> }>,
+		onProgress?: ProgressCallback,
+	): Promise<void> {
+		// Check platform support
+		if (!isPlatformSupported()) {
+			const supported = (
+				MODULE_INFO.supportedPlatforms as readonly string[]
+			).join(", ");
+			throw new Error(
+				`Platform ${this.platformKey} is not supported. Supported: ${supported}`,
+			);
+		}
+
+		onProgress?.({
+			phase: "extracting",
+			message: "Extracting native modules...",
+			percent: 20,
+		});
+
+		// Clean up existing node-pty directory
+		if (existsSync(this.nodePtyDir)) {
+			rmSync(this.nodePtyDir, { recursive: true, force: true });
+		}
+
+		// Ensure directories exist
+		mkdirSync(join(this.nodePtyDir, "build", "Release"), {
+			recursive: true,
+		});
+		mkdirSync(join(this.nodePtyDir, "lib"), { recursive: true });
+
+		// Extract files from node-pty/ prefix
+		const targetPrefix = "node-pty/";
+		for (const [path, entry] of Object.entries(files)) {
+			if (entry.dir) continue;
+			if (!path.startsWith(targetPrefix)) continue;
+
+			const relativePath = path.substring(targetPrefix.length);
+			if (!relativePath) continue;
+
+			const content = await entry.getData();
+			const targetPath = join(this.nodePtyDir, relativePath);
+
+			const parentDir = dirname(targetPath);
+			if (!existsSync(parentDir)) {
+				mkdirSync(parentDir, { recursive: true });
+			}
+
+			writeFileSync(targetPath, content);
+			console.log(
+				`📄 Extracted: ${relativePath} (${Math.round(content.length / 1024)} KB)`,
+			);
+		}
+
+		onProgress?.({
+			phase: "extracting",
+			message: "Verifying installation...",
+			percent: 70,
+		});
+
+		// Verify structure
+		const expectedBinaries = PLATFORM_BINARIES[this.platformKey] || [];
+		const extractedFiles: Array<{ name: string; size: number }> = [];
+		const missingFiles: string[] = [];
+
+		if (!existsSync(join(this.nodePtyDir, "package.json"))) {
+			missingFiles.push("package.json");
+		}
+		if (!existsSync(join(this.nodePtyDir, "lib", "index.js"))) {
+			missingFiles.push("lib/index.js");
+		}
+
+		for (const file of expectedBinaries) {
+			const filePath = join(this.nodePtyDir, "build", "Release", file);
+			if (!existsSync(filePath)) {
+				missingFiles.push(`build/Release/${file}`);
+			} else {
+				const stat = statSync(filePath);
+				extractedFiles.push({ name: file, size: stat.size });
+				console.log(`✅ Verified: ${file}`);
+			}
+		}
+
+		if (missingFiles.length > 0) {
+			throw new Error(
+				`Missing files: ${missingFiles.join(", ")}. Make sure the ZIP is for your platform (${this.platformKey}).`,
+			);
+		}
+
+		// Write manifest
+		this.writeManifest(
+			"local",
+			MODULE_INFO.electronVersion,
+			MODULE_INFO.nodeABI,
+			extractedFiles,
+		);
+
+		onProgress?.({
+			phase: "complete",
+			message: "Native modules installed successfully!",
+			percent: 100,
+		});
+	}
+
+	/**
+	 * Install plugin core files from already-parsed ZIP
+	 *
+	 * ZIP structure (flat):
+	 *   main.js
+	 *   manifest.json
+	 *   styles.css
+	 */
+	private async installCoreFromParsedZip(
+		files: Record<string, { dir: boolean; getData: () => Promise<Buffer> }>,
+		onProgress?: ProgressCallback,
+	): Promise<void> {
+		onProgress?.({
+			phase: "extracting",
+			message: "Updating plugin core files...",
+			percent: 30,
+		});
+
+		const coreFiles = ["main.js", "manifest.json", "styles.css"];
+		const updatedFiles: string[] = [];
+
+		for (const filename of coreFiles) {
+			const entry = files[filename];
+			if (entry && !entry.dir) {
+				const content = await entry.getData();
+				const targetPath = join(this.pluginDir, filename);
+				writeFileSync(targetPath, content);
+				updatedFiles.push(filename);
+				console.log(
+					`📄 Updated: ${filename} (${Math.round(content.length / 1024)} KB)`,
+				);
+			}
+		}
+
+		if (updatedFiles.length === 0) {
+			throw new Error(
+				"No core files found in ZIP. Expected: main.js, manifest.json, styles.css",
+			);
+		}
+
+		onProgress?.({
+			phase: "complete",
+			message: `Plugin updated (${updatedFiles.join(", ")}). Please reload Obsidian.`,
+			percent: 100,
+		});
+	}
+
+	/**
+	 * Extract ZIP file containing node-pty structure
 	 *
 	 * ZIP structure:
-	 *   win32_x64/node-pty/package.json
-	 *   win32_x64/node-pty/lib/*.js
-	 *   win32_x64/node-pty/build/Release/*.node
+	 *   node-pty/package.json
+	 *   node-pty/lib/*.js
+	 *   node-pty/build/Release/*.node
 	 */
 	private async extractNodePtyZip(
 		buffer: Buffer,
 		platformKey: string,
 	): Promise<void> {
 		const files = await this.parseZip(buffer);
-		const platformPrefix = `${platformKey}/node-pty/`;
+		// The zip now contains "node-pty/..." at the root level
+		const targetPrefix = "node-pty/";
 
 		for (const [path, entry] of Object.entries(files)) {
 			// Skip directories
 			if (entry.dir) continue;
 
-			// Only extract files from our platform's node-pty folder
-			if (!path.startsWith(platformPrefix)) {
+			// Only extract files that are inside the node-pty folder
+			if (!path.startsWith(targetPrefix)) {
 				continue;
 			}
 
 			// Get relative path within node-pty
-			const relativePath = path.substring(platformPrefix.length);
+			const relativePath = path.substring(targetPrefix.length);
 			if (!relativePath) continue;
 
 			const content = await entry.getData();

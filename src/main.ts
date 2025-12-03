@@ -2,10 +2,10 @@ import {
 	Plugin,
 	WorkspaceLeaf,
 	Notice,
-	normalizePath,
 	Platform,
 	Menu,
 } from "obsidian";
+import * as path from "path";
 import {
 	ITerminalPlugin,
 	TerminalPluginError,
@@ -511,14 +511,10 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 			const basePath = adapter.getBasePath
 				? adapter.getBasePath()
 				: adapter.basePath || "";
-			const manifestDir = this.manifest.dir;
+			const manifestDir = this.manifest.dir || "";
 
-			// Use require directly since we're in Electron environment
-			const path = require("path");
 			const pluginPath = path.join(basePath, manifestDir);
-
-			// Normalize the path using Obsidian's normalizePath function
-			const normalizedPath = normalizePath(pluginPath);
+			const normalizedPath = this.normalizePluginPath(pluginPath);
 
 			console.log("✅ Calculated plugin directory:", normalizedPath);
 			console.log("📁 Base path:", basePath);
@@ -531,16 +527,26 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 
 			// Alternative approach - use manifest.dir directly if available
 			if (this.manifest.dir) {
-				const fallbackPath = normalizePath(this.manifest.dir);
+				const fallbackPath = this.normalizePluginPath(
+					path.join(process.cwd(), this.manifest.dir)
+				);
 				console.log("📂 Using manifest.dir as fallback:", fallbackPath);
 				return fallbackPath;
 			}
 
 			// Final fallback to process.cwd()
-			const cwd = process.cwd();
+			const cwd = this.normalizePluginPath(process.cwd());
 			console.log("🏠 Using process.cwd() as final fallback:", cwd);
 			return cwd;
 		}
+	}
+
+	/**
+	 * Normalize file system paths without stripping leading separators
+	 */
+	private normalizePluginPath(fsPath: string): string {
+		const normalized = path.normalize(fsPath);
+		return normalized.replace(/\\/g, "/");
 	}
 
 	/**

@@ -7,8 +7,17 @@
 .terminal-settings {
 	/* Fonts */
 	--term-font:
-		"JetBrains Mono", "Fira Code", "Consolas", "Apple Color Emoji",
-		"Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", monospace;
+		"JetBrains Mono", "Fira Code", "SF Mono", "Menlo", "Consolas",
+		"Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+		"Noto Color Emoji", monospace;
+	--term-ui-font: var(
+		--font-interface,
+		"Inter",
+		"Segoe UI",
+		system-ui,
+		-apple-system,
+		sans-serif
+	);
 	--term-font-size: 13px;
 
 	/* Dark Mode (CRT Phosphor) Default */
@@ -57,7 +66,7 @@
 
 /* --- 2. BASE CONTAINER & CRT EFFECTS --- */
 .terminal-settings {
-	font-family: var(--term-font) !important;
+	font-family: var(--term-ui-font) !important;
 	font-size: var(--term-font-size);
 	background-color: var(--term-bg-primary);
 	color: var(--term-green);
@@ -119,7 +128,6 @@
 .terminal-settings h1,
 .terminal-settings h2,
 .terminal-settings h3 {
-	font-family: var(--term-font);
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
 	border: none !important;
@@ -154,10 +162,6 @@
 	padding: 15px 0;
 }
 
-.terminal-settings .setting-item-info {
-	font-family: var(--term-font);
-}
-
 .terminal-settings .setting-item-name {
 	font-size: 14px;
 	font-weight: bold;
@@ -183,7 +187,6 @@
 	border: 1px solid var(--term-green) !important;
 	border-radius: 0 !important;
 	color: var(--term-green) !important;
-	font-family: var(--term-font) !important;
 	text-transform: uppercase;
 	box-shadow: none !important;
 	transition: all 0.2s;
@@ -217,7 +220,6 @@
 	border: 1px solid var(--term-gray) !important;
 	border-radius: 0 !important;
 	color: var(--term-green) !important;
-	font-family: var(--term-font) !important;
 	padding: 8px !important;
 }
 .terminal-settings input:focus,
@@ -282,7 +284,6 @@
 	color: var(--term-green) !important;
 	border: 1px solid var(--term-gray) !important;
 	border-radius: 0 !important;
-	font-family: var(--term-font) !important;
 	padding-right: 25px !important;
 	background-image: none !important; /* Remove native arrow */
 }
@@ -318,6 +319,7 @@
 	margin: 20px 0;
 	background: var(--term-bg-card);
 	position: relative;
+	font-family: var(--term-font);
 }
 .terminal-status-card::before {
 	content: " SYSTEM_STATUS ";

@@ -134,9 +134,9 @@ export class TerminalSettingsTab extends PluginSettingTab {
 
 		// Install from local ZIP button
 		new Setting(actionContainer)
-			.setName("Install from Local File")
+			.setName("Install from Local ZIP")
 			.setDesc(
-				"If download fails (e.g., rate limit), manually download the ZIP from GitHub Releases and install here",
+				"Select a ZIP file to install. Supports both plugin core updates (main.js, manifest.json, styles.css) and native module bundles (for your platform).",
 			)
 			.addButton((btn: ButtonComponent) => {
 				btn.setButtonText("Select ZIP File").onClick(async () => {
