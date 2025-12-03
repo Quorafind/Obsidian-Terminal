@@ -132,6 +132,18 @@ export class TerminalSettingsTab extends PluginSettingTab {
 					});
 			});
 
+		// Install from local ZIP button
+		new Setting(actionContainer)
+			.setName("Install from Local File")
+			.setDesc(
+				"If download fails (e.g., rate limit), manually download the ZIP from GitHub Releases and install here",
+			)
+			.addButton((btn: ButtonComponent) => {
+				btn.setButtonText("Select ZIP File").onClick(async () => {
+					await this.installFromLocalFile(btn);
+				});
+			});
+
 		// GitHub repo setting
 		new Setting(actionContainer)
 			.setName("GitHub Repository")
@@ -334,6 +346,68 @@ export class TerminalSettingsTab extends PluginSettingTab {
 			btn.setDisabled(false);
 			btn.setButtonText("Download");
 		}
+	}
+
+	/**
+	 * Install from local ZIP file using file picker
+	 */
+	private async installFromLocalFile(btn: ButtonComponent): Promise<void> {
+		// Create a hidden file input
+		const fileInput = document.createElement("input");
+		fileInput.type = "file";
+		fileInput.accept = ".zip";
+		fileInput.style.display = "none";
+
+		fileInput.addEventListener("change", async () => {
+			const file = fileInput.files?.[0];
+			if (!file) {
+				fileInput.remove();
+				return;
+			}
+
+			btn.setDisabled(true);
+			btn.setButtonText("Installing...");
+
+			if (this.progressEl) {
+				this.progressEl.style.display = "block";
+				this.progressEl.empty();
+			}
+
+			const progressCallback = this.createProgressCallback();
+
+			try {
+				const arrayBuffer = await file.arrayBuffer();
+				await this.binaryManager.installFromLocalZip(
+					arrayBuffer,
+					progressCallback,
+				);
+
+				new Notice(
+					"Native modules installed successfully! Please reload the plugin.",
+				);
+
+				// Refresh display
+				setTimeout(() => {
+					this.display();
+				}, 1000);
+			} catch (error) {
+				console.error("Installation from local file failed:", error);
+				new Notice(`Installation failed: ${(error as Error).message}`);
+
+				progressCallback({
+					phase: "error",
+					message: (error as Error).message,
+					error: error as Error,
+				});
+			} finally {
+				btn.setDisabled(false);
+				btn.setButtonText("Select ZIP File");
+				fileInput.remove();
+			}
+		});
+
+		document.body.appendChild(fileInput);
+		fileInput.click();
 	}
 
 	/**

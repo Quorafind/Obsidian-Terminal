@@ -384,6 +384,118 @@ export class NativeBinaryManager {
 	}
 
 	/**
+	 * Install binaries from local ZIP file
+	 */
+	async installFromLocalZip(
+		zipBuffer: ArrayBuffer,
+		onProgress?: ProgressCallback,
+	): Promise<void> {
+		onProgress?.({
+			phase: "extracting",
+			message: "Extracting native modules from local file...",
+			percent: 10,
+		});
+
+		try {
+			// Check platform support first
+			if (!isPlatformSupported()) {
+				const supported = (
+					MODULE_INFO.supportedPlatforms as readonly string[]
+				).join(", ");
+				throw new Error(
+					`Platform ${this.platformKey} is not supported. Supported: ${supported}`,
+				);
+			}
+
+			// Clean up existing node-pty directory
+			if (existsSync(this.nodePtyDir)) {
+				rmSync(this.nodePtyDir, { recursive: true, force: true });
+			}
+
+			// Ensure directories exist
+			mkdirSync(join(this.nodePtyDir, "build", "Release"), {
+				recursive: true,
+			});
+			mkdirSync(join(this.nodePtyDir, "lib"), { recursive: true });
+
+			onProgress?.({
+				phase: "extracting",
+				message: "Extracting files...",
+				percent: 30,
+			});
+
+			// Extract ZIP
+			const buffer = Buffer.from(zipBuffer);
+			await this.extractNodePtyZip(buffer, this.platformKey);
+
+			onProgress?.({
+				phase: "extracting",
+				message: "Verifying installation...",
+				percent: 70,
+			});
+
+			// Verify structure
+			const expectedBinaries = PLATFORM_BINARIES[this.platformKey] || [];
+			const extractedFiles: Array<{ name: string; size: number }> = [];
+			const missingFiles: string[] = [];
+
+			// Check package.json
+			if (!existsSync(join(this.nodePtyDir, "package.json"))) {
+				missingFiles.push("package.json");
+			}
+
+			// Check lib/index.js
+			if (!existsSync(join(this.nodePtyDir, "lib", "index.js"))) {
+				missingFiles.push("lib/index.js");
+			}
+
+			// Check binaries
+			for (const file of expectedBinaries) {
+				const filePath = join(
+					this.nodePtyDir,
+					"build",
+					"Release",
+					file,
+				);
+				if (!existsSync(filePath)) {
+					missingFiles.push(`build/Release/${file}`);
+				} else {
+					const stat = statSync(filePath);
+					extractedFiles.push({ name: file, size: stat.size });
+					console.log(`✅ Extracted: ${file}`);
+				}
+			}
+
+			if (missingFiles.length > 0) {
+				throw new Error(
+					`Missing files in ZIP: ${missingFiles.join(", ")}. Make sure the ZIP contains your platform (${this.platformKey}).`,
+				);
+			}
+
+			// Write manifest (use "local" as version indicator)
+			this.writeManifest(
+				"local",
+				MODULE_INFO.electronVersion,
+				MODULE_INFO.nodeABI,
+				extractedFiles,
+			);
+
+			onProgress?.({
+				phase: "complete",
+				message: "Installation complete from local file",
+				percent: 100,
+			});
+		} catch (error) {
+			onProgress?.({
+				phase: "error",
+				message: `Installation failed: ${(error as Error).message}`,
+				error: error as Error,
+			});
+			throw error;
+		}
+	}
+
+	/**
 	 * Extract ZIP file containing complete node-pty structure
 	 *
 	 * ZIP structure:
