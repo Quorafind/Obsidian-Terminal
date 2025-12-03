@@ -188,19 +188,6 @@ jobs:
             - name: Build plugin
               run: pnpm run build
 
-            # Verify native bundle structure (complete node-pty per platform)
-            - name: Verify native bundle structure
-              run: |
-                  echo "=== Native bundle structure ==="
-                  for platform_dir in native-bundle/*/; do
-                    platform=$(basename "$platform_dir")
-                    echo "📦 $platform:"
-                    echo "  Files:"
-                    find "$platform_dir" -type f | while read f; do
-                      echo "    $(basename "$f")"
-                    done
-                  done
-
             # Get version from tag or manifest
             - name: Get version
               id: version
@@ -216,14 +203,25 @@ jobs:
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
                   echo "Version: $VERSION"
 
-            # Create native bundle ZIP (all platforms in one file)
-            - name: Create native bundle ZIP
+            # Create separate ZIPs for each platform
+            - name: Create platform-specific ZIPs
               run: |
-                  cd native-bundle
-                  zip -r "../${{ env.PLUGIN_NAME }}-v${{ steps.version.outputs.version }}.zip" .
-                  cd ..
-                  echo "=== ZIP contents ==="
-                  unzip -l "${{ env.PLUGIN_NAME }}-v${{ steps.version.outputs.version }}.zip"
+                  mkdir -p release-assets
+
+                  for platform_dir in native-bundle/*; do
+                    platform_name=$(basename "$platform_dir")
+                    zip_name="${{ env.PLUGIN_NAME }}-v${{ steps.version.outputs.version }}-native-${platform_name}.zip"
+
+                    echo "📦 Packaging $platform_name into $zip_name..."
+
+                    # Go into the platform directory so "node-pty" is at the root of the zip
+                    cd "$platform_dir"
+                    zip -r "../../release-assets/$zip_name" node-pty
+                    cd - > /dev/null
+                  done
+
+                  echo "=== Generated Assets ==="
+                  ls -la release-assets/
 
             # Prepare release directory
             - name: Prepare release files
@@ -232,7 +230,14 @@ jobs:
                   cp main.js release/
                   cp manifest.json release/
                   [ -f styles.css ] && cp styles.css release/ || touch release/styles.css
-                  cp "${{ env.PLUGIN_NAME }}-v${{ steps.version.outputs.version }}.zip" release/
+
+                  # Create Core Plugin ZIP (flat structure with main.js, manifest.json, styles.css)
+                  cd release
+                  zip "${{ env.PLUGIN_NAME }}-v${{ steps.version.outputs.version }}.zip" main.js manifest.json styles.css
+                  cd ..
+
+                  # Copy native platform zips to release folder
+                  cp release-assets/*.zip release/
                   echo "=== Release files ==="
                   ls -la release/
 
@@ -249,7 +254,7 @@ jobs:
                       release/main.js
                       release/manifest.json
                       release/styles.css
-                      release/${{ env.PLUGIN_NAME }}-v${{ steps.version.outputs.version }}.zip
+                      release/*.zip
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
