@@ -142,22 +142,40 @@ export class PTYManager extends BasePTYManager {
 
 	/**
 	 * Destroy a PTY process and clean up resources
+	 *
+	 * On Windows, calling pty.kill() directly via @electron/remote can trigger
+	 * Obsidian's Start Screen window to appear (likely due to signal handling
+	 * in the main process). To avoid this, we use a graceful shutdown approach:
+	 * 1. Send Ctrl+C (SIGINT equivalent) to allow the shell to clean up
+	 * 2. Send 'exit' command as a fallback
+	 * 3. Let the process terminate naturally
+	 *
+	 * The PTY will be garbage collected after removal from tracking.
 	 */
 	destroyPTY(pty: IPty): void {
 		try {
 			if (this.activePTYs.has(pty)) {
-				// Remove from tracking
+				// Remove from tracking first
 				this.activePTYs.delete(pty);
 
-				// Remove all listeners BEFORE killing to prevent exit event handling
+				// Remove all listeners BEFORE termination to prevent exit event handling
 				pty.removeAllListeners();
 
-				// Kill the process
+				// Graceful shutdown: send Ctrl+C and exit command instead of kill()
+				// This avoids triggering Obsidian's Start Screen on Windows
 				try {
-					pty.kill();
+					// Send Ctrl+C (ETX) to interrupt any running process
+					pty.write("\x03");
+					// Send exit command to terminate the shell
+					pty.write("exit\r");
 				} catch (error) {
-					console.warn("Failed to kill PTY process:", error);
+					// Process may already be dead, ignore write errors
+					console.warn("Failed to send exit signal to PTY:", error);
 				}
+
+				// Note: We intentionally do NOT call pty.kill() here
+				// The process will terminate naturally after receiving exit command
+				// or will be cleaned up when the PTY object is garbage collected
 			}
 		} catch (error) {
 			throw new TerminalPluginError(
