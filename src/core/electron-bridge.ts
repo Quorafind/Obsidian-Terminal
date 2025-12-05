@@ -62,6 +62,187 @@ export class ElectronBridge extends BaseElectronBridge {
 	}
 
 	/**
+	 * Get Electron version
+	 * @returns Electron version string or null if not available
+	 */
+	getElectronVersion(): string | null {
+		try {
+			return process.versions.electron || null;
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Get Obsidian version information
+	 * @returns Object containing Obsidian and installer versions
+	 */
+	getObsidianVersion(): {
+		obsidianVersion: string | null;
+		installerVersion: string | null;
+		error?: string;
+	} {
+		try {
+			// Try to get @electron/remote or electron.remote
+			let remote: any;
+			try {
+				remote = this.requireModule("@electron/remote");
+			} catch {
+				try {
+					remote = (window as any).require("@electron/remote");
+				} catch {
+					// Try old electron.remote API
+					const electron = this.requireModule("electron");
+					remote = electron?.remote;
+				}
+			}
+
+			if (!remote) {
+				return {
+					obsidianVersion: null,
+					installerVersion: null,
+					error: "@electron/remote not available",
+				};
+			}
+
+			// Get Obsidian version via IPC
+			let obsidianVersion: string | null = null;
+			try {
+				const { ipcRenderer } = this.requireModule("electron");
+				if (ipcRenderer && typeof ipcRenderer.sendSync === "function") {
+					obsidianVersion = ipcRenderer.sendSync("version");
+				}
+			} catch (e) {
+				console.warn("Failed to get Obsidian version via IPC:", e);
+			}
+
+			// Get installer version via remote.app
+			let installerVersion: string | null = null;
+			try {
+				if (remote.app && typeof remote.app.getVersion === "function") {
+					installerVersion = remote.app.getVersion();
+				}
+			} catch (e) {
+				console.warn("Failed to get installer version:", e);
+			}
+
+			return {
+				obsidianVersion,
+				installerVersion,
+			};
+		} catch (error) {
+			return {
+				obsidianVersion: null,
+				installerVersion: null,
+				error: (error as Error).message || String(error),
+			};
+		}
+	}
+
+	/**
+	 * Get all version information for debugging
+	 */
+	getVersionInfo(): {
+		electron: string | null;
+		obsidian: string | null;
+		installer: string | null;
+		node: string | null;
+		chrome: string | null;
+		platform: string;
+	} {
+		const { obsidianVersion, installerVersion } = this.getObsidianVersion();
+
+		return {
+			electron: this.getElectronVersion(),
+			obsidian: obsidianVersion,
+			installer: installerVersion,
+			node: process.versions.node || null,
+			chrome: process.versions.chrome || null,
+			platform: process.platform,
+		};
+	}
+
+	/**
+	 * Parse version string to comparable number
+	 * Examples: "1.5.3" -> [1, 5, 3], "1.5.3-beta" -> [1, 5, 3]
+	 */
+	private parseVersion(version: string): number[] {
+		try {
+			// Remove 'v' prefix and beta/alpha suffixes
+			const cleaned = version.replace(/^v/, "").split("-")[0];
+			return cleaned.split(".").map((n) => parseInt(n, 10) || 0);
+		} catch {
+			return [0, 0, 0];
+		}
+	}
+
+	/**
+	 * Compare two versions
+	 * Returns: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
+	 */
+	private compareVersions(v1: string, v2: string): number {
+		const parts1 = this.parseVersion(v1);
+		const parts2 = this.parseVersion(v2);
+
+		for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+			const p1 = parts1[i] || 0;
+			const p2 = parts2[i] || 0;
+
+			if (p1 < p2) return -1;
+			if (p1 > p2) return 1;
+		}
+
+		return 0;
+	}
+
+	/**
+	 * Check if installer version needs update
+	 * @returns Object with needsUpdate flag and reason
+	 */
+	checkInstallerVersion(): {
+		needsUpdate: boolean;
+		reason: string | null;
+		obsidianVersion: string | null;
+		installerVersion: string | null;
+	} {
+		const { obsidianVersion, installerVersion, error } =
+			this.getObsidianVersion();
+
+		// Cannot determine if version info is unavailable
+		if (error || !obsidianVersion || !installerVersion) {
+			return {
+				needsUpdate: false,
+				reason: null,
+				obsidianVersion,
+				installerVersion,
+			};
+		}
+
+		// Compare versions
+		const comparison = this.compareVersions(
+			installerVersion,
+			obsidianVersion,
+		);
+
+		// Installer version is older than Obsidian version
+		if (comparison < 0) {
+			return {
+				needsUpdate: true,
+				reason: `Installer version (${installerVersion}) is older than Obsidian version (${obsidianVersion}). Please reinstall Obsidian to update the installer.`,
+				obsidianVersion,
+				installerVersion,
+			};
+		}
+
+		return {
+			needsUpdate: false,
+			reason: null,
+			obsidianVersion,
+			installerVersion,
+		};
+	}
+
+	/**
 	 * Safely require a module using Electron's require
 	 */
 	requireModule(moduleName: string): any {

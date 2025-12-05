@@ -13,7 +13,10 @@ import {
 	FitAddon as GhosttyFitAddon,
 } from "ghostty-web";
 import { WorkspaceLeaf, Menu, Scope } from "obsidian";
-import { GhosttyLinkDetector } from "@/core/obsidian-link-provider";
+import {
+	GhosttyLinkDetector,
+	GhosttyObsidianLinkProvider,
+} from "@/core/obsidian-link-provider";
 import {
 	TerminalView as BaseTerminalView,
 	TerminalSession,
@@ -947,7 +950,9 @@ export class TerminalView extends BaseTerminalView {
 				}),
 		});
 
-		console.log("✅ Ghostty IME support initialized");
+		console.log(
+			"✅ Ghostty event handlers initialized (native IME support via ghostty-web 0.3.0+)",
+		);
 	}
 
 	/**
@@ -957,6 +962,26 @@ export class TerminalView extends BaseTerminalView {
 	private setupObsidianLinkDetector(): void {
 		if (!this.shadowContainer || !this.terminal) return;
 
+		// For Ghostty mode: register link provider for native hover highlighting
+		if (this.useGhostty) {
+			const linkProvider = new GhosttyObsidianLinkProvider(
+				this.app,
+				this.terminal,
+				this.leaf,
+			);
+			// ghostty-web Terminal has registerLinkProvider method
+			(this.terminal as any).registerLinkProvider(linkProvider);
+
+			this.disposables.push({
+				dispose: () => linkProvider.dispose(),
+			});
+
+			console.log(
+				"✅ Ghostty Obsidian link provider registered (hover underline enabled)",
+			);
+		}
+
+		// GhosttyLinkDetector handles hover popover and Ctrl+Click for all renderers
 		this.ghosttyLinkDetector = new GhosttyLinkDetector(
 			this.app,
 			this.terminal,

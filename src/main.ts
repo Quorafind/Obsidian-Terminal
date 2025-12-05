@@ -138,12 +138,87 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 			text: "Terminal plugin requires native modules",
 		});
 		container.createEl("br");
+
+		// Get version information
+		const electronVersion = process.versions?.electron || "unknown";
+		const nodeVersion = process.versions?.node || "unknown";
+
+		// Try to get Obsidian version via IPC
+		let obsidianVersion = "unknown";
+		try {
+			const { ipcRenderer } = window.require("electron");
+			if (ipcRenderer && typeof ipcRenderer.sendSync === "function") {
+				obsidianVersion = ipcRenderer.sendSync("version") || "unknown";
+			}
+		} catch (e) {
+			// Silently fail if IPC is not available
+		}
+
+		// Try to get installer version
+		let installerVersion = "unknown";
+		try {
+			const remote = window.require("@electron/remote");
+			if (remote?.app && typeof remote.app.getVersion === "function") {
+				installerVersion = remote.app.getVersion();
+			}
+		} catch (e) {
+			// Silently fail if remote is not available
+		}
+
+		// Display version information
 		container.createEl("span", {
-			text: `Platform: ${status.platformKey}`,
+			text: `Electron: v${electronVersion} | Obsidian: v${obsidianVersion}`,
+			cls: "notice-version",
+		});
+		container.createEl("br");
+		container.createEl("span", {
+			text: `Installer: v${installerVersion} | Platform: ${status.platformKey}`,
 			cls: "notice-platform",
 		});
 		container.createEl("br");
 		container.createEl("br");
+
+		// Check if installer needs update
+		const needsInstallerUpdate =
+			installerVersion !== "unknown" &&
+			obsidianVersion !== "unknown" &&
+			installerVersion < obsidianVersion;
+
+		if (needsInstallerUpdate) {
+			container.createEl("strong", {
+				text: "⚠️ IMPORTANT: Your Obsidian installer is outdated!",
+				cls: "notice-warning",
+			});
+			container.createEl("br");
+			container.createEl("span", {
+				text: `Installer v${installerVersion} < Obsidian v${obsidianVersion}`,
+			});
+			container.createEl("br");
+			container.createEl("span", {
+				text: "This causes Electron version mismatch. Please reinstall Obsidian from obsidian.md",
+			});
+			container.createEl("br");
+			container.createEl("br");
+		} else {
+			// Add warning about version compatibility
+			container.createEl("span", {
+				text: "⚠️ Native modules must match your Electron version",
+				cls: "notice-warning",
+			});
+			container.createEl("br");
+			container.createEl("br");
+		}
+
+		// Add download button if installer needs update
+		if (needsInstallerUpdate) {
+			const downloadBtn = container.createEl("button", {
+				text: "Download Obsidian",
+			});
+			downloadBtn.onclick = () => {
+				window.open("https://obsidian.md/download", "_blank");
+			};
+			downloadBtn.style.marginRight = "8px";
+		}
 
 		const btn = container.createEl("button", { text: "Open Settings" });
 		btn.onclick = () => {
@@ -155,6 +230,84 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 
 		const closeBtn = container.createEl("button", {
 			text: "Later",
+			cls: "notice-close-btn",
+		});
+		closeBtn.style.marginLeft = "8px";
+		closeBtn.onclick = () => notice.hide();
+	}
+
+	/**
+	 * Show warning about outdated installer version
+	 */
+	private showInstallerUpdateWarning(
+		obsidianVersion: string,
+		installerVersion: string,
+	): void {
+		const notice = new Notice("", 0); // Persistent notice
+		const container = notice.messageEl;
+		container.empty();
+		container.addClass("terminal-native-notice");
+		container.style.backgroundColor = "#ff9800";
+		container.style.color = "#000";
+
+		container.createEl("strong", {
+			text: "⚠️ Obsidian Installer Update Required",
+		});
+		container.createEl("br");
+		container.createEl("br");
+
+		container.createEl("div", {
+			text: `Your Obsidian installer is outdated and may cause compatibility issues with native modules:`,
+		});
+		container.createEl("br");
+
+		container.createEl("span", {
+			text: `• Obsidian version: v${obsidianVersion}`,
+		});
+		container.createEl("br");
+		container.createEl("span", {
+			text: `• Installer version: v${installerVersion} (outdated)`,
+		});
+		container.createEl("br");
+		container.createEl("br");
+
+		container.createEl("strong", {
+			text: "Why this matters:",
+		});
+		container.createEl("br");
+		container.createEl("span", {
+			text: "The installer version determines the Electron version. Native modules (like node-pty) must match the Electron version to work correctly.",
+		});
+		container.createEl("br");
+		container.createEl("br");
+
+		container.createEl("strong", {
+			text: "Solution:",
+		});
+		container.createEl("br");
+		container.createEl("span", {
+			text: "1. Download the latest Obsidian installer from obsidian.md",
+		});
+		container.createEl("br");
+		container.createEl("span", {
+			text: "2. Reinstall Obsidian (your data will be preserved)",
+		});
+		container.createEl("br");
+		container.createEl("span", {
+			text: "3. Restart Obsidian and reinstall native modules in Terminal settings",
+		});
+		container.createEl("br");
+		container.createEl("br");
+
+		const downloadBtn = container.createEl("button", {
+			text: "Download Obsidian",
+		});
+		downloadBtn.onclick = () => {
+			window.open("https://obsidian.md/download", "_blank");
+		};
+
+		const closeBtn = container.createEl("button", {
+			text: "Close",
 			cls: "notice-close-btn",
 		});
 		closeBtn.style.marginLeft = "8px";
@@ -258,6 +411,29 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 			throw new TerminalPluginError(
 				TerminalErrorType.ELECTRON_NOT_AVAILABLE,
 				"Terminal plugin requires desktop Obsidian",
+			);
+		}
+
+		// Log version information for debugging
+		const versionInfo = this.electronBridge.getVersionInfo();
+		console.log("=".repeat(50));
+		console.log("📋 Terminal Plugin - Version Information");
+		console.log("=".repeat(50));
+		console.log(`🔷 Electron version: ${versionInfo.electron || "unknown"}`);
+		console.log(`🔷 Obsidian version: ${versionInfo.obsidian || "unknown"}`);
+		console.log(`🔷 Installer version: ${versionInfo.installer || "unknown"}`);
+		console.log(`🔷 Node.js version: ${versionInfo.node || "unknown"}`);
+		console.log(`🔷 Chrome version: ${versionInfo.chrome || "unknown"}`);
+		console.log(`🔷 Platform: ${versionInfo.platform}`);
+		console.log("=".repeat(50));
+
+		// Check if installer version needs update
+		const installerCheck = this.electronBridge.checkInstallerVersion();
+		if (installerCheck.needsUpdate && installerCheck.reason) {
+			console.warn("⚠️ " + installerCheck.reason);
+			this.showInstallerUpdateWarning(
+				installerCheck.obsidianVersion || "unknown",
+				installerCheck.installerVersion || "unknown",
 			);
 		}
 

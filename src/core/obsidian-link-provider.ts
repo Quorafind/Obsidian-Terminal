@@ -1,6 +1,12 @@
 import { App, WorkspaceLeaf, HoverParent, debounce } from "obsidian";
 import { HoverPopover } from "obsidian";
-import type { Terminal as XTerminal, ILinkProvider, ILink } from "@xterm/xterm";
+import type {
+	Terminal as XTerminal,
+	ILinkProvider,
+	ILink,
+	IDecoration,
+	IMarker,
+} from "@xterm/xterm";
 
 /**
  * Obsidian internal link pattern: [[filename]], [[filename#heading]], [[filename|alias]], [[filename#heading|alias]]
@@ -334,6 +340,285 @@ export class GhosttyLinkDetector implements HoverParent {
 	}
 
 	dispose(): void {
+		for (const dispose of this.disposables) {
+			dispose();
+		}
+		this.disposables = [];
+	}
+}
+
+/**
+ * ghostty-web compatible ILinkProvider for Obsidian internal links
+ *
+ * Implements the ghostty-web ILinkProvider interface to detect [[...]] links
+ * and leverage ghostty-web's native hover highlighting (blue underline).
+ *
+ * Usage:
+ *   const provider = new GhosttyObsidianLinkProvider(app, terminal);
+ *   terminal.registerLinkProvider(provider);
+ */
+export class GhosttyObsidianLinkProvider {
+	private app: App;
+	private terminal: any; // ghostty-web Terminal
+	private leaf?: WorkspaceLeaf;
+
+	constructor(app: App, terminal: any, leaf?: WorkspaceLeaf) {
+		this.app = app;
+		this.terminal = terminal;
+		this.leaf = leaf;
+	}
+
+	/**
+	 * Provide links for a given row (ghostty-web ILinkProvider interface)
+	 * @param y Row number (0-based, absolute buffer position)
+	 * @param callback Called with detected links
+	 */
+	provideLinks(
+		y: number,
+		callback: (
+			links:
+				| Array<{
+						text: string;
+						range: {
+							start: { x: number; y: number };
+							end: { x: number; y: number };
+						};
+						activate: (event: MouseEvent) => void;
+						hover?: (isHovered: boolean) => void;
+				  }>
+				| undefined,
+		) => void,
+	): void {
+		try {
+			const lineText = this.getLineText(y);
+			if (!lineText) {
+				callback(undefined);
+				return;
+			}
+
+			const parsedLinks = parseObsidianLinks(lineText);
+			if (parsedLinks.length === 0) {
+				callback(undefined);
+				return;
+			}
+
+			const links = parsedLinks.map((link) => ({
+				text: link.fullMatch,
+				range: {
+					start: { x: link.startIndex, y: y },
+					end: { x: link.endIndex, y: y },
+				},
+				activate: (_event: MouseEvent) => {
+					// Open the Obsidian link
+					openObsidianLink(this.app, link).catch(console.error);
+				},
+				hover: (_isHovered: boolean) => {
+					// Hover preview is handled by GhosttyLinkDetector's mouse events
+					// ghostty-web's hover callback doesn't provide the MouseEvent needed for popover positioning
+				},
+			}));
+
+			callback(links);
+		} catch (error) {
+			console.error("Error providing Obsidian links:", error);
+			callback(undefined);
+		}
+	}
+
+	/**
+	 * Get line text from terminal buffer
+	 */
+	private getLineText(y: number): string | null {
+		const buffer = this.terminal.buffer?.active;
+		if (!buffer) return null;
+
+		const line = buffer.getLine(y);
+		if (!line) return null;
+
+		return line.translateToString(true);
+	}
+
+	dispose(): void {
+		// Cleanup if needed
+	}
+}
+
+/**
+ * Highlight manager for Obsidian links in terminal buffer
+ * Uses xterm.js Decoration API for real-time visual highlighting
+ */
+export class ObsidianLinkHighlighter {
+	private terminal: XTerminal;
+	private decorations: Map<string, IDecoration> = new Map();
+	private markers: Map<string, IMarker> = new Map();
+	private disposables: Array<() => void> = [];
+	private updateDebounced: () => void;
+	private isGhostty: boolean;
+
+	/**
+	 * @param terminal - xterm.js Terminal instance
+	 * @param isGhostty - Whether using Ghostty renderer (decorations only work with xterm)
+	 */
+	constructor(terminal: XTerminal, isGhostty = false) {
+		this.terminal = terminal;
+		this.isGhostty = isGhostty;
+
+		// Debounce updates to avoid excessive re-renders
+		this.updateDebounced = debounce(() => {
+			this.updateHighlights();
+		}, 100);
+	}
+
+	initialize(): void {
+		// Skip decoration API for Ghostty renderer
+		if (this.isGhostty) {
+			console.log(
+				"⚠️ Obsidian link highlighting not available in Ghostty mode (xterm decoration API not supported)",
+			);
+			return;
+		}
+
+		// Initial scan
+		this.updateHighlights();
+
+		// Listen to buffer changes
+		const onData = this.terminal.onData(() => {
+			this.updateDebounced();
+		});
+
+		const onScroll = this.terminal.onScroll(() => {
+			this.updateDebounced();
+		});
+
+		this.disposables.push(() => {
+			onData.dispose();
+			onScroll.dispose();
+		});
+
+		console.log("✅ Obsidian link highlighter initialized");
+	}
+
+	/**
+	 * Scan terminal buffer and create decorations for all Obsidian links
+	 */
+	private updateHighlights(): void {
+		if (this.isGhostty) return;
+
+		// Clear old decorations
+		this.clearDecorations();
+
+		try {
+			const buffer = this.terminal.buffer.active;
+			if (!buffer) return;
+
+			const viewportY = buffer.viewportY;
+			const rows = this.terminal.rows;
+
+			// Scan visible lines plus some buffer
+			const startLine = Math.max(0, viewportY - 50);
+			const endLine = Math.min(buffer.length, viewportY + rows + 50);
+
+			for (
+				let lineNumber = startLine;
+				lineNumber < endLine;
+				lineNumber++
+			) {
+				const line = buffer.getLine(lineNumber);
+				if (!line) continue;
+
+				const lineText = line.translateToString(true);
+				const links = parseObsidianLinks(lineText);
+
+				for (const link of links) {
+					this.createDecoration(lineNumber, link);
+				}
+			}
+		} catch (error) {
+			console.error("Error updating Obsidian link highlights:", error);
+		}
+	}
+
+	/**
+	 * Create decoration for a single Obsidian link
+	 */
+	private createDecoration(lineNumber: number, link: ObsidianLink): void {
+		try {
+			// Create marker for this line (relative to current cursor)
+			const buffer = this.terminal.buffer.active;
+			if (!buffer) return;
+
+			// Calculate offset from cursor
+			const cursorY = buffer.cursorY + buffer.baseY;
+			const offset = lineNumber - cursorY;
+
+			const marker = this.terminal.registerMarker(offset);
+			if (!marker) return;
+
+			// Create decoration with Obsidian-themed colors
+			const decoration = this.terminal.registerDecoration({
+				marker: marker,
+				x: link.startIndex,
+				width: link.endIndex - link.startIndex,
+				backgroundColor: "#7c3aed22", // Purple with transparency
+				foregroundColor: "#c4b5fd", // Light purple
+				layer: "top",
+			});
+
+			if (!decoration) {
+				marker.dispose();
+				return;
+			}
+
+			// Store decoration and marker for cleanup
+			const key = `${lineNumber}-${link.startIndex}`;
+			this.decorations.set(key, decoration);
+			this.markers.set(key, marker);
+
+			// Optional: Add custom styling when decoration renders
+			decoration.onRender((element) => {
+				if (element) {
+					element.style.borderBottom = "1px dashed #7c3aed";
+					element.style.borderRadius = "2px";
+					element.style.cursor = "pointer";
+				}
+			});
+
+			// Clean up when marker is disposed
+			marker.onDispose(() => {
+				this.decorations.delete(key);
+				this.markers.delete(key);
+			});
+		} catch (error) {
+			console.error("Error creating decoration:", error);
+		}
+	}
+
+	/**
+	 * Clear all decorations
+	 */
+	private clearDecorations(): void {
+		for (const decoration of this.decorations.values()) {
+			decoration.dispose();
+		}
+		for (const marker of this.markers.values()) {
+			marker.dispose();
+		}
+		this.decorations.clear();
+		this.markers.clear();
+	}
+
+	/**
+	 * Force update highlights (useful after terminal resize or theme change)
+	 */
+	refresh(): void {
+		this.updateHighlights();
+	}
+
+	/**
+	 * Dispose all resources
+	 */
+	dispose(): void {
+		this.clearDecorations();
 		for (const dispose of this.disposables) {
 			dispose();
 		}
