@@ -68,7 +68,7 @@ export const DEFAULT_SETTINGS: TerminalPluginSettings = {
 	cursorBlink: true,
 	scrollback: 1000,
 	githubRepo: "quorafind/obsidian-terminal",
-	renderer: "xterm",
+	renderer: "ghostty",
 	// Theme defaults
 	themeMode: "system",
 	darkThemePreset: "dracula",
@@ -821,7 +821,7 @@ export class TerminalSettingsTab extends PluginSettingTab {
 				dropdown
 					.addOption("xterm", "Xterm.js (Canvas)")
 					.addOption("xterm-webgl", "Xterm.js (WebGL)")
-					.addOption("ghostty", "Ghostty (Experimental)")
+					.addOption("ghostty", "Ghostty")
 					.setValue(
 						this.plugin.settings?.renderer ??
 							DEFAULT_SETTINGS.renderer,

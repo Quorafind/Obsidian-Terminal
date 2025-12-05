@@ -12,7 +12,8 @@ import {
 	Terminal as GhosttyTerminal,
 	FitAddon as GhosttyFitAddon,
 } from "ghostty-web";
-import { WorkspaceLeaf, Menu } from "obsidian";
+import { WorkspaceLeaf, Menu, Scope } from "obsidian";
+import { GhosttyLinkDetector } from "@/core/obsidian-link-provider";
 import {
 	TerminalView as BaseTerminalView,
 	TerminalSession,
@@ -65,7 +66,7 @@ ${xtermCss}
   --terminal-selection: var(--text-selection, rgba(255, 255, 255, 0.3));
 }
 
-/* Container styles */
+/* Container styles - Shadow DOM mode */
 .terminal-shadow-container {
   height: 100%;
   width: 100%;
@@ -75,13 +76,25 @@ ${xtermCss}
   overflow: hidden;
 }
 
-/* xterm.js container */
-.xterm {
+/* Container styles - Direct DOM mode (WebGL) */
+.terminal-direct-container {
   height: 100%;
   width: 100%;
+  background: var(--terminal-bg);
+  padding: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
+/* xterm.js container - 确保完全填充父容器 */
+.xterm {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* xterm viewport - 确保正确的滚动和背景 */
 .xterm-viewport {
+  height: 100% !important;
   overflow-y: auto !important;
   background: var(--terminal-bg) !important;
 }
@@ -90,25 +103,33 @@ ${xtermCss}
   outline-color: var(--text-accent);
 }
 
+/* xterm screen - 确保正确填充 */
 .xterm-screen {
-  height: 100%;
+  height: 100% !important;
+  width: 100% !important;
 }
 
 /*
  * IME/中文输入支持：保持 helper-textarea 可访问但不可见
- * 注意：不能完全隐藏 textarea，否则 IME 无法正常工作
+ * xterm.js 会自动根据光标位置更新 textarea 的 left/top
+ * 我们只需确保它不遮挡内容且尺寸为 0
  */
 .xterm-helper-textarea {
   position: absolute !important;
+  /* 尺寸设为 0，完全不遮挡内容 */
+  width: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  /* 保持可见以支持 IME 定位（opacity: 0 而非 display: none） */
   opacity: 0 !important;
-  left: 0 !important;
-  top: 0 !important;
-  z-index: -5 !important;
-  /* 保持最小尺寸以支持 IME 定位 */
-  width: 1px !important;
-  height: 1px !important;
+  /* 不设置 left/top，让 xterm.js 动态定位 */
   overflow: hidden !important;
-  /* 不禁用 pointer-events，允许 IME 事件 */
+  /* z-index 设为正值，确保 IME 候选框能正常显示 */
+  z-index: 10 !important;
+  /* 禁止指针事件，避免干扰终端交互 */
+  pointer-events: none !important;
 }
 
 /* 隐藏字符测量元素 */
@@ -165,6 +186,55 @@ ${xtermCss}
   margin: 0;
   pointer-events: none;
 }
+
+/*
+ * Obsidian Link Styles - [[...]] internal links
+ * Provides visual feedback for clickable Obsidian links in terminal output
+ */
+
+/* xterm.js link hover styles (via registerLinkProvider) */
+.xterm-link-layer {
+  pointer-events: auto;
+}
+
+/* Obsidian link hover overlay for Ghostty */
+.obsidian-link-hover {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(var(--color-accent-rgb, 99, 102, 241), 0.15);
+  border-bottom: 1px dashed var(--text-accent, #7c3aed);
+  border-radius: 2px;
+  z-index: 10;
+}
+
+/* Tooltip for Obsidian links */
+.obsidian-link-tooltip {
+  position: absolute;
+  background: var(--background-primary, #1e1e1e);
+  color: var(--text-normal, #d4d4d4);
+  border: 1px solid var(--background-modifier-border, #444);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+.obsidian-link-tooltip::before {
+  content: "📄 ";
+}
+
+/* Hint text for Ctrl+Click */
+.obsidian-link-hint {
+  font-size: 10px;
+  color: var(--text-muted, #888);
+  margin-left: 8px;
+}
 `;
 
 // Global store for shell sessions to persist across tab switches
@@ -194,8 +264,12 @@ export class TerminalView extends BaseTerminalView {
 	private fitAddon!: FitAddon;
 	private webLinksAddon?: WebLinksAddon;
 	private searchAddon?: SearchAddon;
+	private searchContainer?: HTMLElement;
+	private searchInput?: HTMLInputElement;
+	private isSearchVisible = false;
 	private imeTextarea?: HTMLTextAreaElement;
 	private isComposing = false;
+	private ghosttyLinkDetector?: GhosttyLinkDetector;
 	private disposables: Array<{ dispose(): void }> = [];
 	private isInitialized = false;
 	private isConnected = false;
@@ -204,6 +278,7 @@ export class TerminalView extends BaseTerminalView {
 		"idle";
 	private currentTitle = "";
 	private shellName = "";
+	private keyboardScope: Scope | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -420,13 +495,17 @@ export class TerminalView extends BaseTerminalView {
 			this.openTerminalInShadow();
 			this.loadWebglAddon(); // Must be after open() for WebGL context
 			this.connectToPTY();
-			this.setupKeyboardHandlers();
-			this.setupContextMenu();
 
-			// Setup IME support for Ghostty mode
+			// Setup IME support for Ghostty mode (must be before setupKeyboardHandlers)
 			if (this.useGhostty) {
 				this.setupGhosttyIME();
 			}
+
+			// Setup Obsidian link detection for all renderers
+			this.setupObsidianLinkDetector();
+
+			this.setupKeyboardHandlers();
+			this.setupContextMenu();
 
 			// Initial fit after a short delay to ensure DOM is ready
 			requestAnimationFrame(() => {
@@ -473,6 +552,67 @@ export class TerminalView extends BaseTerminalView {
 		}
 
 		await ghosttyInitPromise;
+	}
+
+	/**
+	 * Update IME textarea position to follow the terminal cursor
+	 * Calculates pixel position based on cursor grid coordinates and cell size
+	 *
+	 * This enables IME candidate window to appear near the cursor position
+	 * instead of being fixed at top-left corner.
+	 */
+	private updateGhosttyImePosition(): void {
+		if (
+			!this.useGhostty ||
+			!this.terminal ||
+			!this.imeTextarea ||
+			!this.shadowContainer
+		) {
+			return;
+		}
+
+		// Access buffer to get cursor position (xterm.js compatible API)
+		const term = this.terminal as any;
+		if (!term.buffer?.active) {
+			return;
+		}
+
+		const buffer = term.buffer.active;
+		const cursorX: number = buffer.cursorX ?? 0;
+		const cursorY: number = buffer.cursorY ?? 0;
+
+		const cols = this.terminal.cols;
+		const rows = this.terminal.rows;
+
+		if (!cols || !rows) {
+			return;
+		}
+
+		// Container padding defined in shadowStyles (8px)
+		const CONTAINER_PADDING = 8;
+
+		// Calculate available content area (excluding padding)
+		const contentWidth =
+			this.shadowContainer.clientWidth - CONTAINER_PADDING * 2;
+		const contentHeight =
+			this.shadowContainer.clientHeight - CONTAINER_PADDING * 2;
+
+		if (contentWidth <= 0 || contentHeight <= 0) {
+			return;
+		}
+
+		// Calculate cell dimensions
+		const cellWidth = contentWidth / cols;
+		const cellHeight = contentHeight / rows;
+
+		// Calculate pixel position (add padding offset)
+		// Offset by one cell height to position IME candidate window below the cursor line
+		const left = CONTAINER_PADDING + cursorX * cellWidth;
+		const top = CONTAINER_PADDING + (cursorY + 1) * cellHeight;
+
+		// Update textarea position
+		this.imeTextarea.style.left = `${left}px`;
+		this.imeTextarea.style.top = `${top}px`;
 	}
 
 	/**
@@ -524,6 +664,22 @@ export class TerminalView extends BaseTerminalView {
 			}
 
 			const key = e.key;
+
+			// Handle Ctrl+F for search (intercept before PTY forwarding)
+			if (e.ctrlKey && key.toLowerCase() === "f") {
+				e.preventDefault();
+				e.stopPropagation();
+				this.toggleSearch(true);
+				return;
+			}
+
+			// Handle Escape to close search
+			if (key === "Escape" && this.isSearchVisible) {
+				e.preventDefault();
+				e.stopPropagation();
+				this.toggleSearch(false);
+				return;
+			}
 
 			// Allow modifier keys to pass through for IME switching (e.g., Shift to toggle input method)
 			if (
@@ -692,6 +848,24 @@ export class TerminalView extends BaseTerminalView {
 		this.imeTextarea.addEventListener("keydown", onTextareaKeyDown);
 		this.imeTextarea.addEventListener("input", onInput);
 
+		// --- IME Position Tracking ---
+		// Update IME textarea position to follow cursor for proper candidate window placement
+		const updateImePosition = () => this.updateGhosttyImePosition();
+
+		// Update on user interaction (keyup captures position after key processing)
+		this.imeTextarea.addEventListener("keyup", updateImePosition);
+		this.imeTextarea.addEventListener("focus", updateImePosition);
+
+		// Update when terminal cursor moves (shell output, navigation, etc.)
+		const term = this.terminal as any;
+		if (term.onCursorMove) {
+			const cursorMoveDisposable = term.onCursorMove(updateImePosition);
+			this.disposables.push(cursorMoveDisposable);
+		}
+
+		// Initial position update
+		this.updateGhosttyImePosition();
+
 		this.disposables.push({
 			dispose: () => {
 				this.imeTextarea?.removeEventListener(
@@ -707,6 +881,14 @@ export class TerminalView extends BaseTerminalView {
 					onTextareaKeyDown,
 				);
 				this.imeTextarea?.removeEventListener("input", onInput);
+				this.imeTextarea?.removeEventListener(
+					"keyup",
+					updateImePosition,
+				);
+				this.imeTextarea?.removeEventListener(
+					"focus",
+					updateImePosition,
+				);
 			},
 		});
 
@@ -766,6 +948,149 @@ export class TerminalView extends BaseTerminalView {
 		});
 
 		console.log("✅ Ghostty IME support initialized");
+	}
+
+	/**
+	 * Setup Obsidian link detection for all renderers
+	 * Uses GhosttyLinkDetector which works with mouse events for all terminal types
+	 */
+	private setupObsidianLinkDetector(): void {
+		if (!this.shadowContainer || !this.terminal) return;
+
+		this.ghosttyLinkDetector = new GhosttyLinkDetector(
+			this.app,
+			this.terminal,
+			this.shadowContainer,
+			this.leaf,
+		);
+		this.ghosttyLinkDetector.initialize();
+
+		this.disposables.push({
+			dispose: () => {
+				this.ghosttyLinkDetector?.dispose();
+				this.ghosttyLinkDetector = undefined;
+			},
+		});
+
+		const renderer = this.useGhostty
+			? "Ghostty"
+			: this.useWebGL
+				? "WebGL"
+				: "Canvas";
+		console.log(`✅ Obsidian link detector initialized (${renderer})`);
+	}
+
+	onPaneMenu(menu: Menu) {
+		menu.addSeparator();
+		this.buildTerminalMenu(menu);
+	}
+
+	/**
+	 * Build shared terminal menu items (used by both pane menu and context menu)
+	 */
+	private buildTerminalMenu(menu: Menu): void {
+		// Split terminal - vertical (side by side)
+		menu.addItem((item) =>
+			item
+				.setTitle("Split right")
+				.setIcon("separator-vertical")
+				.onClick(() => {
+					this.splitTerminal("vertical");
+				}),
+		);
+
+		// Split terminal - horizontal (top and bottom)
+		menu.addItem((item) =>
+			item
+				.setTitle("Split down")
+				.setIcon("separator-horizontal")
+				.onClick(() => {
+					this.splitTerminal("horizontal");
+				}),
+		);
+
+		menu.addSeparator();
+
+		// Clear terminal
+		menu.addItem((item) =>
+			item
+				.setTitle("Clear")
+				.setIcon("trash-2")
+				.onClick(() => {
+					this.clear();
+				}),
+		);
+
+		// Select all
+		menu.addItem((item) =>
+			item
+				.setTitle("Select all")
+				.setIcon("text-select")
+				.onClick(() => {
+					this.terminal.selectAll();
+				}),
+		);
+
+		menu.addSeparator();
+
+		// Restart terminal
+		menu.addItem((item) =>
+			item
+				.setTitle("Restart")
+				.setIcon("refresh-cw")
+				.onClick(() => {
+					this.restartTerminal();
+				}),
+		);
+
+		// New terminal (trigger plugin command)
+		menu.addItem((item) =>
+			item
+				.setTitle("New terminal")
+				.setIcon("terminal")
+				.onClick(() => {
+					(this.app as any).commands.executeCommandById(
+						"obsidian-terminal-view:open-terminal",
+					);
+				}),
+		);
+	}
+
+	/**
+	 * Split the current terminal view and create a new terminal in the split
+	 * @param direction "vertical" for side-by-side, "horizontal" for top-bottom
+	 */
+	private async splitTerminal(
+		direction: "vertical" | "horizontal",
+	): Promise<void> {
+		try {
+			// Create new leaf by splitting current leaf
+			const newLeaf = this.app.workspace.createLeafBySplit(
+				this.leaf,
+				direction,
+			);
+
+			// Create a new terminal session
+			const session =
+				await this.plugin.terminalManager.createTerminalWithAvailableShell();
+
+			// Create new terminal view
+			const view = new TerminalView(newLeaf, session, this.plugin);
+
+			// Set the view state
+			await newLeaf.setViewState({
+				type: VIEW_TYPE_TERMINAL,
+				active: true,
+			});
+
+			// Focus the new terminal after a short delay
+			setTimeout(() => {
+				this.app.workspace.setActiveLeaf(newLeaf, { focus: true });
+				view.focus();
+			}, 100);
+		} catch (error) {
+			console.error("Failed to split terminal:", error);
+		}
 	}
 
 	/**
@@ -914,6 +1239,9 @@ export class TerminalView extends BaseTerminalView {
 
 			// Note: WebGL addon is loaded separately in loadWebglAddon()
 			// after terminal.open() because it requires DOM attachment
+
+			// Note: Obsidian link provider is registered in registerObsidianLinkProvider()
+			// after terminal.open() because registerLinkProvider requires DOM attachment
 
 			console.log("✅ xterm.js addons loaded");
 		}
@@ -1413,6 +1741,248 @@ export class TerminalView extends BaseTerminalView {
 	}
 
 	/**
+	 * Toggle search box visibility
+	 */
+	toggleSearch(show?: boolean): void {
+		const shouldShow = show ?? !this.isSearchVisible;
+
+		if (shouldShow) {
+			this.showSearch();
+		} else {
+			this.hideSearch();
+		}
+	}
+
+	/**
+	 * Show the search box
+	 */
+	private showSearch(): void {
+		if (this.isSearchVisible && this.searchInput) {
+			this.searchInput.focus();
+			this.searchInput.select();
+			return;
+		}
+
+		// Create search container if not exists
+		if (!this.searchContainer) {
+			this.createSearchUI();
+		}
+
+		if (this.searchContainer) {
+			this.searchContainer.style.display = "flex";
+			this.isSearchVisible = true;
+			this.searchInput?.focus();
+			this.searchInput?.select();
+		}
+	}
+
+	/**
+	 * Hide the search box
+	 */
+	private hideSearch(): void {
+		if (this.searchContainer) {
+			this.searchContainer.style.display = "none";
+		}
+		this.isSearchVisible = false;
+		this.searchAddon?.clearDecorations();
+		this.terminal?.focus();
+	}
+
+	/**
+	 * Create search UI in contentEl
+	 */
+	private createSearchUI(): void {
+		// Create container at top-right of contentEl
+		this.searchContainer = this.contentEl.createDiv({
+			cls: "terminal-search-container",
+		});
+
+		// Search input
+		this.searchInput = this.searchContainer.createEl("input", {
+			cls: "terminal-search-input",
+			attr: {
+				type: "text",
+				placeholder: "Search...",
+				spellcheck: "false",
+			},
+		});
+
+		// Previous button
+		const prevBtn = this.searchContainer.createEl("button", {
+			cls: "terminal-search-btn",
+			attr: { "aria-label": "Previous match" },
+		});
+		prevBtn.innerHTML = "↑";
+
+		// Next button
+		const nextBtn = this.searchContainer.createEl("button", {
+			cls: "terminal-search-btn",
+			attr: { "aria-label": "Next match" },
+		});
+		nextBtn.innerHTML = "↓";
+
+		// Close button
+		const closeBtn = this.searchContainer.createEl("button", {
+			cls: "terminal-search-btn terminal-search-close",
+			attr: { "aria-label": "Close search" },
+		});
+		closeBtn.innerHTML = "×";
+
+		// Event handlers
+		this.searchInput.addEventListener("input", () => {
+			this.performSearch();
+		});
+
+		this.searchInput.addEventListener("keydown", (e: KeyboardEvent) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				if (e.shiftKey) {
+					this.searchPrevious();
+				} else {
+					this.searchNext();
+				}
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				this.hideSearch();
+			}
+		});
+
+		prevBtn.addEventListener("click", () => this.searchPrevious());
+		nextBtn.addEventListener("click", () => this.searchNext());
+		closeBtn.addEventListener("click", () => this.hideSearch());
+
+		// Initially hidden
+		this.searchContainer.style.display = "none";
+	}
+
+	/**
+	 * Perform search with current input value
+	 */
+	private performSearch(): void {
+		if (!this.searchInput) return;
+
+		const query = this.searchInput.value;
+		if (!query) {
+			this.searchAddon?.clearDecorations();
+			return;
+		}
+
+		if (this.searchAddon) {
+			// xterm.js mode: use SearchAddon
+			this.searchAddon.findNext(query);
+		} else if (this.useGhostty) {
+			// Ghostty mode: manual buffer search
+			this.ghosttySearch(query, "next");
+		}
+	}
+
+	/**
+	 * Find next match
+	 */
+	private searchNext(): void {
+		if (!this.searchInput?.value) return;
+
+		if (this.searchAddon) {
+			this.searchAddon.findNext(this.searchInput.value);
+		} else if (this.useGhostty) {
+			this.ghosttySearch(this.searchInput.value, "next");
+		}
+	}
+
+	/**
+	 * Find previous match
+	 */
+	private searchPrevious(): void {
+		if (!this.searchInput?.value) return;
+
+		if (this.searchAddon) {
+			this.searchAddon.findPrevious(this.searchInput.value);
+		} else if (this.useGhostty) {
+			this.ghosttySearch(this.searchInput.value, "previous");
+		}
+	}
+
+	/**
+	 * Manual search implementation for Ghostty mode
+	 * Searches through the terminal buffer and scrolls to match
+	 */
+	private ghosttySearch(query: string, direction: "next" | "previous"): void {
+		if (!this.terminal || !query) return;
+
+		const term = this.terminal as any;
+		if (!term.buffer?.active) return;
+
+		const buffer = term.buffer.active;
+		const totalLines = buffer.length;
+		const viewportY = buffer.viewportY ?? 0;
+		const cursorY = buffer.cursorY ?? 0;
+
+		// Current search position (viewport-relative)
+		const startLine = viewportY + cursorY;
+
+		// Search through buffer lines
+		const lowerQuery = query.toLowerCase();
+		let foundLine = -1;
+
+		if (direction === "next") {
+			// Search forward from current position
+			for (let i = startLine + 1; i < totalLines; i++) {
+				const line = buffer.getLine(i);
+				if (line) {
+					const text = line.translateToString().toLowerCase();
+					if (text.includes(lowerQuery)) {
+						foundLine = i;
+						break;
+					}
+				}
+			}
+			// Wrap around to beginning
+			if (foundLine === -1) {
+				for (let i = 0; i <= startLine; i++) {
+					const line = buffer.getLine(i);
+					if (line) {
+						const text = line.translateToString().toLowerCase();
+						if (text.includes(lowerQuery)) {
+							foundLine = i;
+							break;
+						}
+					}
+				}
+			}
+		} else {
+			// Search backward from current position
+			for (let i = startLine - 1; i >= 0; i--) {
+				const line = buffer.getLine(i);
+				if (line) {
+					const text = line.translateToString().toLowerCase();
+					if (text.includes(lowerQuery)) {
+						foundLine = i;
+						break;
+					}
+				}
+			}
+			// Wrap around to end
+			if (foundLine === -1) {
+				for (let i = totalLines - 1; i >= startLine; i--) {
+					const line = buffer.getLine(i);
+					if (line) {
+						const text = line.translateToString().toLowerCase();
+						if (text.includes(lowerQuery)) {
+							foundLine = i;
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		// Scroll to found line
+		if (foundLine !== -1) {
+			this.terminal.scrollToLine(foundLine);
+		}
+	}
+
+	/**
 	 * Apply settings update to terminal
 	 * Called when user changes settings to apply changes immediately
 	 */
@@ -1433,34 +2003,128 @@ export class TerminalView extends BaseTerminalView {
 
 	/**
 	 * Set up keyboard handlers for copy/paste
+	 * Uses Obsidian's Scope to intercept hotkeys before Obsidian's global handlers
 	 */
 	private setupKeyboardHandlers(): void {
+		// xterm.js custom key event handler (handles events within terminal)
 		this.terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
 			return this.handleKeyboardEvent(event);
 		});
+
+		// Create an Obsidian Scope to intercept hotkeys before Obsidian's global handlers
+		// This prevents Obsidian's Ctrl+F (search notes) from triggering when terminal is focused
+		this.keyboardScope = new Scope(this.app.scope);
+
+		// Register terminal-specific hotkeys in the scope
+		// Ctrl+F: Terminal search (prevent Obsidian's global search)
+		this.keyboardScope.register(["Ctrl"], "f", (evt: KeyboardEvent) => {
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.toggleSearch(true);
+			return false;
+		});
+
+		// Escape: Close terminal search
+		this.keyboardScope.register([], "Escape", (evt: KeyboardEvent) => {
+			if (this.isSearchVisible) {
+				evt.preventDefault();
+				evt.stopPropagation();
+				this.toggleSearch(false);
+				return false;
+			}
+			// Let Escape propagate if search is not visible (for other uses)
+			return true;
+		});
+
+		// Push scope when terminal container gets focus
+		const pushScope = () => {
+			if (this.keyboardScope) {
+				this.app.keymap.pushScope(this.keyboardScope);
+			}
+		};
+
+		// Pop scope when terminal container loses focus
+		const popScope = () => {
+			if (this.keyboardScope) {
+				this.app.keymap.popScope(this.keyboardScope);
+			}
+		};
+
+		// Listen for focus events on the terminal container
+		if (this.shadowContainer) {
+			this.shadowContainer.addEventListener("focusin", pushScope);
+			this.shadowContainer.addEventListener("focusout", popScope);
+
+			this.disposables.push({
+				dispose: () => {
+					this.shadowContainer?.removeEventListener(
+						"focusin",
+						pushScope,
+					);
+					this.shadowContainer?.removeEventListener(
+						"focusout",
+						popScope,
+					);
+					// Ensure scope is popped on disposal
+					if (this.keyboardScope) {
+						this.app.keymap.popScope(this.keyboardScope);
+					}
+				},
+			});
+		}
+
+		// Also push scope when IME textarea is focused (Ghostty mode)
+		if (this.imeTextarea) {
+			this.imeTextarea.addEventListener("focus", pushScope);
+			this.imeTextarea.addEventListener("blur", popScope);
+
+			this.disposables.push({
+				dispose: () => {
+					this.imeTextarea?.removeEventListener("focus", pushScope);
+					this.imeTextarea?.removeEventListener("blur", popScope);
+				},
+			});
+		}
 	}
 
 	/**
-	 * Handle keyboard events for copy/paste
+	 * Handle keyboard events for copy/paste/search
 	 */
 	private handleKeyboardEvent(event: KeyboardEvent): boolean {
+		// Handle Ctrl+F for search
+		if (event.ctrlKey && event.key === "f") {
+			event.preventDefault();
+			this.toggleSearch(true);
+			return false;
+		}
+
+		// Handle Escape to close search
+		if (event.key === "Escape" && this.isSearchVisible) {
+			this.toggleSearch(false);
+			return false;
+		}
+
 		// Handle Ctrl+C for copy when there's a selection
 		if (
 			event.ctrlKey &&
 			event.key === "c" &&
 			this.terminal.hasSelection()
 		) {
+			event.preventDefault();
+			event.stopPropagation();
 			const selection = this.terminal.getSelection();
 			if (selection) {
 				navigator.clipboard.writeText(selection).catch((err) => {
 					console.error("Failed to copy:", err);
 				});
-				return false; // Prevent default
 			}
+			return false; // Prevent default
 		}
 
 		// Handle Ctrl+V for paste
 		if (event.ctrlKey && event.key === "v") {
+			event.preventDefault();
+			event.stopPropagation();
 			navigator.clipboard
 				.readText()
 				.then((text) => {
@@ -1503,7 +2167,7 @@ export class TerminalView extends BaseTerminalView {
 	private showContextMenu(event: MouseEvent): void {
 		const menu = new Menu();
 
-		// Copy selected text
+		// Copy selected text (context menu only)
 		if (this.terminal.hasSelection()) {
 			menu.addItem((item) =>
 				item
@@ -1522,7 +2186,7 @@ export class TerminalView extends BaseTerminalView {
 			);
 		}
 
-		// Paste
+		// Paste (context menu only)
 		menu.addItem((item) =>
 			item
 				.setTitle("Paste")
@@ -1543,49 +2207,8 @@ export class TerminalView extends BaseTerminalView {
 
 		menu.addSeparator();
 
-		// Clear terminal
-		menu.addItem((item) =>
-			item
-				.setTitle("Clear")
-				.setIcon("trash-2")
-				.onClick(() => {
-					this.clear();
-				}),
-		);
-
-		// Select all
-		menu.addItem((item) =>
-			item
-				.setTitle("Select All")
-				.setIcon("text-select")
-				.onClick(() => {
-					this.terminal.selectAll();
-				}),
-		);
-
-		menu.addSeparator();
-
-		// Restart terminal
-		menu.addItem((item) =>
-			item
-				.setTitle("Restart")
-				.setIcon("refresh-cw")
-				.onClick(() => {
-					this.restartTerminal();
-				}),
-		);
-
-		// New terminal (trigger plugin command)
-		menu.addItem((item) =>
-			item
-				.setTitle("New Terminal")
-				.setIcon("terminal")
-				.onClick(() => {
-					(this.app as any).commands.executeCommandById(
-						"obsidian-terminal-view:open-terminal",
-					);
-				}),
-		);
+		// Shared menu items
+		this.buildTerminalMenu(menu);
 
 		menu.showAtMouseEvent(event);
 	}

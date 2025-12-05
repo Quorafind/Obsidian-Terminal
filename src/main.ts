@@ -303,6 +303,11 @@ export default class TerminalPlugin extends Plugin implements ITerminalPlugin {
 			const session = this.terminalManager.createTerminal();
 			return new TerminalView(leaf, session, this);
 		});
+
+		this.registerHoverLinkSource("terminal", {
+			display: "Terminal",
+			defaultMod: true,
+		});
 	}
 
 	/**

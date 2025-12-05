@@ -25,3 +25,67 @@
 	height: 100%;
 	width: 100%;
 }
+
+/* Terminal Search Box */
+.terminal-search-container {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 8px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.terminal-search-input {
+	width: 180px;
+	padding: 4px 8px;
+	font-size: 13px;
+	color: var(--text-normal);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	outline: none;
+}
+
+.terminal-search-input:focus {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+}
+
+.terminal-search-input::placeholder {
+	color: var(--text-faint);
+}
+
+.terminal-search-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	font-size: 14px;
+	color: var(--text-muted);
+	background: transparent;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		color 0.15s;
+}
+
+.terminal-search-btn:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.terminal-search-close {
+	font-size: 18px;
+	margin-left: 2px;
+}
