@@ -16,6 +16,8 @@ import { WorkspaceLeaf, Menu, Scope } from "obsidian";
 import {
 	GhosttyLinkDetector,
 	GhosttyObsidianLinkProvider,
+	ObsidianLinkHighlighter,
+	ObsidianLinkProvider,
 } from "@/core/obsidian-link-provider";
 import {
 	TerminalView as BaseTerminalView,
@@ -273,6 +275,7 @@ export class TerminalView extends BaseTerminalView {
 	private imeTextarea?: HTMLTextAreaElement;
 	private isComposing = false;
 	private ghosttyLinkDetector?: GhosttyLinkDetector;
+	private linkHighlighter?: ObsidianLinkHighlighter;
 	private disposables: Array<{ dispose(): void }> = [];
 	private isInitialized = false;
 	private isConnected = false;
@@ -979,6 +982,35 @@ export class TerminalView extends BaseTerminalView {
 			console.log(
 				"✅ Ghostty Obsidian link provider registered (hover underline enabled)",
 			);
+		} else {
+			// For xterm.js mode: use decoration API for link highlighting
+			const linkColors = this.getObsidianLinkColors();
+			this.linkHighlighter = new ObsidianLinkHighlighter(
+				this.terminal as XTerminal,
+				false,
+				linkColors,
+			);
+			this.linkHighlighter.initialize();
+
+			this.disposables.push({
+				dispose: () => {
+					this.linkHighlighter?.dispose();
+					this.linkHighlighter = undefined;
+				},
+			});
+
+			// Register xterm.js link provider for native link clicking
+			const xtermLinkProvider = ObsidianLinkProvider.createProvider(
+				this.terminal as XTerminal,
+				this.app,
+			);
+			(this.terminal as XTerminal).registerLinkProvider(
+				xtermLinkProvider,
+			);
+
+			console.log(
+				"✅ xterm.js Obsidian link support initialized (decoration + link provider)",
+			);
 		}
 
 		// GhosttyLinkDetector handles hover popover and Ctrl+Click for all renderers
@@ -1432,6 +1464,65 @@ export class TerminalView extends BaseTerminalView {
 	}
 
 	/**
+	 * Get Obsidian link colors from CSS variables
+	 * Returns colors for link highlighting in terminal
+	 */
+	private getObsidianLinkColors(): {
+		backgroundColor: string;
+		foregroundColor: string;
+		borderColor: string;
+	} {
+		// Get computed styles from document root
+		const rootStyles = getComputedStyle(document.documentElement);
+
+		// Get accent color (--color-accent or fallback to Obsidian purple)
+		const accentColor =
+			rootStyles.getPropertyValue("--color-accent").trim() || "#7c3aed";
+
+		// Get text-on-accent color (or calculate a light version of accent)
+		const textOnAccent =
+			rootStyles.getPropertyValue("--text-on-accent").trim() || "#c4b5fd";
+
+		// Create semi-transparent background (add alpha to accent color)
+		const backgroundColor = this.addAlphaToColor(accentColor, 0.13);
+
+		return {
+			backgroundColor,
+			foregroundColor: textOnAccent,
+			borderColor: accentColor,
+		};
+	}
+
+	/**
+	 * Add alpha channel to hex color
+	 * Converts hex color to rgba with specified opacity
+	 */
+	private addAlphaToColor(hexColor: string, alpha: number): string {
+		// Remove # if present
+		const hex = hexColor.replace("#", "");
+
+		// Parse hex to RGB
+		let r: number, g: number, b: number;
+		if (hex.length === 3) {
+			// Short hex format (#RGB)
+			r = parseInt(hex[0] + hex[0], 16);
+			g = parseInt(hex[1] + hex[1], 16);
+			b = parseInt(hex[2] + hex[2], 16);
+		} else if (hex.length === 6) {
+			// Full hex format (#RRGGBB)
+			r = parseInt(hex.substring(0, 2), 16);
+			g = parseInt(hex.substring(2, 4), 16);
+			b = parseInt(hex.substring(4, 6), 16);
+		} else {
+			// Invalid format, return original with alpha appended if hex8
+			return hexColor + Math.round(alpha * 255).toString(16).padStart(2, "0");
+		}
+
+		// Return rgba format
+		return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+	}
+
+	/**
 	 * Update terminal theme colors
 	 * Called by plugin when Obsidian theme changes (css-change event)
 	 */
@@ -1453,6 +1544,12 @@ export class TerminalView extends BaseTerminalView {
 		} else {
 			// xterm.js handles theme changes automatically via options
 			this.terminal.options.theme = theme;
+
+			// Update Obsidian link highlighter colors
+			if (this.linkHighlighter) {
+				const linkColors = this.getObsidianLinkColors();
+				this.linkHighlighter.updateColors(linkColors);
+			}
 		}
 	}
 

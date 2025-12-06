@@ -454,14 +454,31 @@ export class ObsidianLinkHighlighter {
 	private disposables: Array<() => void> = [];
 	private updateDebounced: () => void;
 	private isGhostty: boolean;
+	private backgroundColor: string;
+	private foregroundColor: string;
+	private borderColor: string;
 
 	/**
 	 * @param terminal - xterm.js Terminal instance
 	 * @param isGhostty - Whether using Ghostty renderer (decorations only work with xterm)
+	 * @param colors - Optional custom colors for link highlighting
 	 */
-	constructor(terminal: XTerminal, isGhostty = false) {
+	constructor(
+		terminal: XTerminal,
+		isGhostty = false,
+		colors?: {
+			backgroundColor?: string;
+			foregroundColor?: string;
+			borderColor?: string;
+		},
+	) {
 		this.terminal = terminal;
 		this.isGhostty = isGhostty;
+
+		// Use provided colors or defaults
+		this.backgroundColor = colors?.backgroundColor ?? "#7c3aed22";
+		this.foregroundColor = colors?.foregroundColor ?? "#c4b5fd";
+		this.borderColor = colors?.borderColor ?? "#7c3aed";
 
 		// Debounce updates to avoid excessive re-renders
 		this.updateDebounced = debounce(() => {
@@ -559,9 +576,9 @@ export class ObsidianLinkHighlighter {
 				marker: marker,
 				x: link.startIndex,
 				width: link.endIndex - link.startIndex,
-				backgroundColor: "#7c3aed22", // Purple with transparency
-				foregroundColor: "#c4b5fd", // Light purple
-				layer: "top",
+				backgroundColor: this.backgroundColor,
+				foregroundColor: this.foregroundColor,
+				layer: "bottom",
 			});
 
 			if (!decoration) {
@@ -577,7 +594,7 @@ export class ObsidianLinkHighlighter {
 			// Optional: Add custom styling when decoration renders
 			decoration.onRender((element) => {
 				if (element) {
-					element.style.borderBottom = "1px dashed #7c3aed";
+					element.style.borderBottom = `1px dashed ${this.borderColor}`;
 					element.style.borderRadius = "2px";
 					element.style.cursor = "pointer";
 				}
@@ -605,6 +622,22 @@ export class ObsidianLinkHighlighter {
 		}
 		this.decorations.clear();
 		this.markers.clear();
+	}
+
+	/**
+	 * Update link colors (useful after theme change)
+	 */
+	updateColors(colors: {
+		backgroundColor?: string;
+		foregroundColor?: string;
+		borderColor?: string;
+	}): void {
+		if (colors.backgroundColor) this.backgroundColor = colors.backgroundColor;
+		if (colors.foregroundColor) this.foregroundColor = colors.foregroundColor;
+		if (colors.borderColor) this.borderColor = colors.borderColor;
+
+		// Refresh all decorations with new colors
+		this.updateHighlights();
 	}
 
 	/**
