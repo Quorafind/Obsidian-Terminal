@@ -1,11 +1,11 @@
-# Obsidian Terminal
+# O Terminal [Obsidian Terminal]
 
 ![Version](https://img.shields.io/github/package-json/v/quorafind/obsidian-terminal)
 ![License](https://img.shields.io/github/license/quorafind/obsidian-terminal)
 ![Downloads](https://img.shields.io/github/downloads/quorafind/obsidian-terminal/total)
 ![Issues](https://img.shields.io/github/issues/quorafind/obsidian-terminal)
 
-**Obsidian Terminal** is a powerful, integrated terminal plugin for Obsidian, built with `xterm.js` and `node-pty`. It brings a fully functional terminal environment directly into your Obsidian workspace, allowing you to run shell commands, git operations, and scripts without leaving your notes.
+**O Terminal** is a powerful, integrated terminal plugin for Obsidian, built with `xterm.js` and `node-pty`. It brings a fully functional terminal environment directly into your Obsidian workspace, allowing you to run shell commands, git operations, and scripts without leaving your notes.
 
 > [!NOTE]
 > This plugin is designed for **Desktop only** (Windows, macOS, Linux). Mobile devices are not supported due to system limitations.

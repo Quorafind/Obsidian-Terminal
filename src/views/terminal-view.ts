@@ -1214,10 +1214,7 @@ export class TerminalView extends BaseTerminalView {
 		// 从插件设置读取配置，提供安全回退值
 		const settings = this.plugin.settings;
 		const fontSize = settings?.fontSize ?? DEFAULT_SETTINGS.fontSize;
-		const fontFamily =
-			this.useGhostty || this.useWebGL
-				? "'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace"
-				: (settings?.fontFamily ?? DEFAULT_SETTINGS.fontFamily);
+		const fontFamily = settings?.fontFamily ?? DEFAULT_SETTINGS.fontFamily;
 		const cursorBlink =
 			settings?.cursorBlink ?? DEFAULT_SETTINGS.cursorBlink;
 		const scrollback = settings?.scrollback ?? DEFAULT_SETTINGS.scrollback;
@@ -1515,7 +1512,12 @@ export class TerminalView extends BaseTerminalView {
 			b = parseInt(hex.substring(4, 6), 16);
 		} else {
 			// Invalid format, return original with alpha appended if hex8
-			return hexColor + Math.round(alpha * 255).toString(16).padStart(2, "0");
+			return (
+				hexColor +
+				Math.round(alpha * 255)
+					.toString(16)
+					.padStart(2, "0")
+			);
 		}
 
 		// Return rgba format

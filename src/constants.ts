@@ -39,6 +39,5 @@ export const PLATFORM_SHELLS = {
  */
 export const GHOSTTY_OPTIONS = {
 	fontSize: 14,
-	fontFamily:
-		"var(--font-monospace-terminal),var(--font-monospace-override),var(--font-monospace-theme), var(--font-monospace)",
+	fontFamily: "'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace",
 } as const;

@@ -3,10 +3,7 @@
 }
 
 .workspace-leaf-content[data-type="terminal-view"] {
-	--font-monospace-terminal:
-		"Monaco", "Menlo", "Consolas", "Courier New", monospace,
-		"Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-		"Noto Color Emoji";
+	--font-monospace-terminal: "'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace";
 }
 
 .workspace-leaf-content[data-type="terminal-view"] .view-header {
