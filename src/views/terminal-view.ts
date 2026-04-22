@@ -319,6 +319,18 @@ export class TerminalView extends BaseTerminalView {
 	}
 
 	getDisplayText(): string {
+		// When "show cwd only" is enabled, extract the basename from the
+		// current title (set via OSC 0/2 by the shell) or fall back to
+		// initialCwd. No shell suffix or truncation is applied.
+		if (this.plugin.settings?.tabTitleShowCwd ?? DEFAULT_SETTINGS.tabTitleShowCwd) {
+			const raw = this.currentTitle.trim() || this.terminalSession?.initialCwd || "";
+			if (raw) {
+				const parts = raw.split(/[\\/]/).filter((p) => p.trim().length > 0);
+				if (parts.length > 0) return parts[parts.length - 1];
+			}
+			return TERMINAL_VIEW_DISPLAY_TEXT;
+		}
+
 		let title = this.currentTitle.trim();
 
 		// Check if currentTitle is actually the shell executable path (not a useful cwd)

@@ -57,6 +57,7 @@ export interface TerminalPluginSettings {
 	themeMode: ThemeMode;
 	darkThemePreset: string;
 	lightThemePreset: string;
+	tabTitleShowCwd: boolean;
 }
 
 /**
@@ -74,6 +75,7 @@ export const DEFAULT_SETTINGS: TerminalPluginSettings = {
 	themeMode: "system",
 	darkThemePreset: "dracula",
 	lightThemePreset: "github-light",
+	tabTitleShowCwd: false,
 };
 
 /**
@@ -389,6 +391,28 @@ export class TerminalSettingsTab extends PluginSettingTab {
 						.onChange(async (value) => {
 							if (this.plugin.settings) {
 								this.plugin.settings.scrollback = value;
+								await this.plugin.saveSettings();
+							}
+						});
+				});
+		});
+
+		// Tab title: show cwd only
+		group.addSetting((setting: Setting) => {
+			setting
+				.setName("Show current directory in tab title")
+				.setDesc(
+					"When enabled, the tab title shows only the current working directory name instead of the full shell title.",
+				)
+				.addToggle((toggle) => {
+					toggle
+						.setValue(
+							this.plugin.settings?.tabTitleShowCwd ??
+								DEFAULT_SETTINGS.tabTitleShowCwd,
+						)
+						.onChange(async (value) => {
+							if (this.plugin.settings) {
+								this.plugin.settings.tabTitleShowCwd = value;
 								await this.plugin.saveSettings();
 							}
 						});
