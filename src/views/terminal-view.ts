@@ -1,7 +1,6 @@
 import { Terminal as XTerminal } from "@xterm/xterm";
 import { FitAddon as XTermFitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { ImageAddon } from "@xterm/addon-image";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -1280,9 +1279,6 @@ export class TerminalView extends BaseTerminalView {
 			this.webLinksAddon = new WebLinksAddon();
 			this.terminal.loadAddon(this.webLinksAddon);
 
-			// Clipboard addon - enhanced clipboard support
-			this.terminal.loadAddon(new ClipboardAddon());
-
 			// Image addon - inline image support (iTerm2/Sixel)
 			this.terminal.loadAddon(new ImageAddon());
 
@@ -2252,21 +2248,12 @@ export class TerminalView extends BaseTerminalView {
 			return false; // Prevent default
 		}
 
-		// Handle Ctrl+V for paste
+		// Ctrl+V: let the browser's native paste event handle it (xterm listens
+		// to the paste event on the terminal element). Returning false here
+		// prevents xterm from also processing the key as input, which would
+		// cause a double paste.
 		if (event.ctrlKey && event.key === "v") {
-			event.preventDefault();
-			event.stopPropagation();
-			navigator.clipboard
-				.readText()
-				.then((text) => {
-					if (text && this.terminalSession.ptyProcess) {
-						this.terminalSession.ptyProcess.write(text);
-					}
-				})
-				.catch((err) => {
-					console.error("Failed to paste:", err);
-				});
-			return false; // Prevent default
+			return false;
 		}
 
 		return true; // Allow other keys
